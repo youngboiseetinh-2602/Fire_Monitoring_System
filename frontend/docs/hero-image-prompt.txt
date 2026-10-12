@@ -1,0 +1,4 @@
+Tool: built-in image_gen (not CLI).
+Final asset: frontend/public/images/forest-fire.jpg
+
+Use case: photorealistic-natural. Create a high-resolution landscape background photograph for a forest fire monitoring website, 3:2 aspect ratio. No text, no UI, no logos. Composition: bottom quarter dense dark green pine forest; layered hazy blue mountain ridges along lower third. On the right hillside a dramatic line of orange wildfire flames and rising gray smoke, warm peach sunset glow. Top half and entire upper left two-thirds predominantly clean near-white pale sky, generous negative space for dark heading overlay. Realistic environmental photography, atmospheric, natural detail. Forest fire stays in right third, horizon low. Match a bright minimal website hero backdrop.

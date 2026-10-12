@@ -2,8 +2,7 @@ package com.firemonitoring.security;
 
 import com.nimbusds.jose.jwk.source.ImmutableSecret;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.userdetails.UserDetails;
+import com.firemonitoring.entity.User;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
@@ -56,19 +55,17 @@ public class JwtProvider {
         this.jwtDecoder = decoder;
     }
 
-    public String generateToken(UserDetails userDetails, Long userId) {
+    public String generateToken(User user) {
         Instant issuedAt = Instant.now();
         Instant expiresAt = issuedAt.plus(expiration);
-        List<String> roles = userDetails.getAuthorities().stream()
-                .map(GrantedAuthority::getAuthority)
-                .toList();
+        List<String> roles = List.of("ROLE_" + user.getRole().name());
 
         JwtClaimsSet claims = JwtClaimsSet.builder()
                 .issuer(issuer)
-                .subject(userDetails.getUsername())
+                .subject(user.getUsername())
                 .issuedAt(issuedAt)
                 .expiresAt(expiresAt)
-                .claim("userId", userId)
+                .claim("userId", user.getId())
                 .claim("roles", roles)
                 .build();
 

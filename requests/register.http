@@ -1,0 +1,59 @@
+@baseUrl = http://localhost:8080
+
+### 1. Valid registration: expect 200 if these unique values are unused
+POST {{baseUrl}}/public/register
+Content-Type: application/json
+
+{
+  "username": "register_test_01",
+  "password": "Test@12345",
+  "fullName": "Nguyen Van An",
+  "phone": "0912345678",
+  "cccd": "001234567890",
+  "role": "MEMBER"
+}
+
+### 2. Repeat request 1 after success: expect 409 (unique constraint)
+POST {{baseUrl}}/public/register
+Content-Type: application/json
+
+{
+  "username": "register_test_01",
+  "password": "Test@12345",
+  "fullName": "Nguyen Van An",
+  "phone": "0912345678",
+  "cccd": "001234567890",
+  "role": "MEMBER"
+}
+
+### 3. Invalid password: expect 400
+POST {{baseUrl}}/public/register
+Content-Type: application/json
+
+{
+  "username": "register_test_02",
+  "password": "123",
+  "fullName": "Nguyen Van Binh",
+  "phone": "0912345679",
+  "cccd": "001234567891",
+  "role": "MEMBER"
+}
+
+### 4. Missing required fields: expect 400
+POST {{baseUrl}}/public/register
+Content-Type: application/json
+
+{}
+
+### 5. Invalid phone: expect 400
+POST {{baseUrl}}/public/register
+Content-Type: application/json
+
+{
+  "username": "register_test_02",
+  "password": "Test@12345",
+  "fullName": "Nguyen Van Binh",
+  "phone": "123",
+  "cccd": "001234567891",
+  "role": "MEMBER"
+}

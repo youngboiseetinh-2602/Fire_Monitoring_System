@@ -10,6 +10,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -52,6 +54,13 @@ public class GlobalException {
         return response(HttpStatus.BAD_REQUEST, message, request);
     }
 
+    @ExceptionHandler({BadCredentialsException.class, UsernameNotFoundException.class})
+    public ResponseEntity<ProblemDetail> handleInvalidCredentials(
+            AuthenticationException exception,
+            HttpServletRequest request) {
+        return response(HttpStatus.UNAUTHORIZED, "Sai tài khoản hoặc mật khẩu", request);
+    }
+
     @ExceptionHandler({AuthenticationException.class, UnauthorizedException.class})
     public ResponseEntity<ProblemDetail> handleUnauthorized(
             Exception exception,
@@ -77,10 +86,10 @@ public class GlobalException {
             NoSuchElementException.class,
             NoHandlerFoundException.class,
             NoResourceFoundException.class,
-            FindNotFoundException.class
+            DataNotFoundException.class
     })
     public ResponseEntity<ProblemDetail> handleNotFound(Exception exception, HttpServletRequest request) {
-        String message = exception instanceof FindNotFoundException
+        String message = exception instanceof DataNotFoundException
                 ? exception.getMessage()
                 : "Resource not found";
         return response(HttpStatus.NOT_FOUND, message, request);

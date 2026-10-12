@@ -8,22 +8,25 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+@RequestMapping("/public")
 @RequiredArgsConstructor
 public class PublicController {
 
     private final UserService userService;
 
-    @PostMapping(value ="/public/register")
-    public ResponseEntity<String> resgister (@RequestBody @Valid userRequest userRequest){
-        return ResponseEntity.ok(userService.register(userRequest));
-
+    @PostMapping("/register")
+    public ResponseEntity<String> register(@RequestBody @Valid userRequest request) {
+        String message = userService.register(request);
+        return ResponseEntity.ok(message);
     }
 
-    @PostMapping(value = "/public/login")
+    @PostMapping("/login")
     public ResponseEntity<String> login(@RequestBody @Valid loginRequest loginRequest) {
         return ResponseEntity.ok(userService.login(loginRequest));
     }
+
 }
