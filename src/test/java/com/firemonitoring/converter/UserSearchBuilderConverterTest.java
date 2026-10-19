@@ -1,8 +1,6 @@
 package com.firemonitoring.converter;
 
 import com.firemonitoring.builder.UserSearchBuilder;
-import com.firemonitoring.enums.UserRole;
-import com.firemonitoring.exception.BadRequestException;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
@@ -15,41 +13,28 @@ class UserSearchBuilderConverterTest {
     @Test
     void convertsQueryParametersAndPreservesLeadingZeros() {
         UserSearchBuilder result = converter.toUserSearchBuilder(Map.of(
-                "id", "42", "username", " an ", "fullName", "Nguyen An",
-                "phone", "0912345678", "cccd", "001234567890", "role", "member"));
+                "username", " an ", "fullName", "Nguyen An", "cccd", "001234567890"));
 
-        assertEquals(42L, result.getId());
         assertEquals("an", result.getUsername());
         assertEquals("Nguyen An", result.getFullName());
-        assertEquals("0912345678", result.getPhone());
         assertEquals("001234567890", result.getCccd());
-        assertEquals(UserRole.MEMBER, result.getRole());
+        assertFalse(result.isEmpty());
     }
 
     @Test
     void missingAndBlankFiltersAreAbsent() {
-        UserSearchBuilder result = converter.toUserSearchBuilder(Map.of("id", " ", "role", ""));
-        assertNull(result.getId());
-        assertNull(result.getRole());
+        UserSearchBuilder result = converter.toUserSearchBuilder(Map.of("fullName", " ", "cccd", ""));
+        assertNull(result.getFullName());
+        assertNull(result.getCccd());
         assertNull(result.getUsername());
+        assertTrue(result.isEmpty());
     }
 
     @Test
-    void rejectsInvalidOrOverflowingIdsAndUnknownRoles() {
-        for (String id : new String[]{"abc", "1.5", "9223372036854775808"}) {
-            BadRequestException error = assertThrows(BadRequestException.class,
-                    () -> converter.toUserSearchBuilder(Map.of("id", id)));
-            assertTrue(error.getMessage().contains("'id'"));
-        }
-        assertThrows(BadRequestException.class,
-                () -> converter.toUserSearchBuilder(Map.of("role", "unknown")));
-    }
-
-    @Test
-    void acceptsTypedValues() {
-        UserSearchBuilder result = converter.toUserSearchBuilder(Map.of("id", 42L, "role", UserRole.OWNER));
-        assertEquals(42L, result.getId());
-        assertEquals(UserRole.OWNER, result.getRole());
+    void ignoresFieldsOutsideSupportedSearchInput() {
+        UserSearchBuilder result = converter.toUserSearchBuilder(Map.of(
+                "id", "abc", "phone", "0912345678", "role", "MEMBER", "page", "0"));
+        assertTrue(result.isEmpty());
     }
 
     @Test

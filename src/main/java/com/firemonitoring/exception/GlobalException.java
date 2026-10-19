@@ -30,14 +30,13 @@ import java.util.NoSuchElementException;
 public class GlobalException {
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ProblemDetail> handleValidation(
-            MethodArgumentNotValidException exception,
-            HttpServletRequest request) {
+    public ResponseEntity<Map<String, String>> handleValidation(
+            MethodArgumentNotValidException exception) {
         Map<String, String> validationErrors = new LinkedHashMap<>();
         for (FieldError error : exception.getBindingResult().getFieldErrors()) {
             validationErrors.putIfAbsent(error.getField(), error.getDefaultMessage());
         }
-        return response(HttpStatus.BAD_REQUEST, "Validation failed", request, validationErrors);
+        return ResponseEntity.badRequest().body(validationErrors);
     }
 
     @ExceptionHandler({
@@ -121,21 +120,10 @@ public class GlobalException {
             HttpStatus status,
             String message,
             HttpServletRequest request) {
-        return response(status, message, request, Map.of());
-    }
-
-    private ResponseEntity<ProblemDetail> response(
-            HttpStatus status,
-            String message,
-            HttpServletRequest request,
-            Map<String, String> validationErrors) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, message);
         problem.setTitle(status.getReasonPhrase());
         problem.setProperty("timestamp", Instant.now());
         problem.setProperty("path", request.getRequestURI());
-        if (!validationErrors.isEmpty()) {
-            problem.setProperty("validationErrors", validationErrors);
-        }
         return ResponseEntity.status(status).body(problem);
     }
 }

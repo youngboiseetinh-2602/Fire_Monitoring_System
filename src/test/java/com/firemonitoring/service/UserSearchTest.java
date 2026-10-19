@@ -25,7 +25,7 @@ class UserSearchTest {
     void absentAndBlankFiltersUseFindAll() {
         when(repository.findAll(any(Pageable.class))).thenReturn(Page.empty());
         service.search(Map.of("page", "0"), 0);
-        service.search(Map.of("fullName", " ", "role", ""), 0);
+        service.search(Map.of("fullName", " ", "cccd", ""), 0);
         verify(repository, times(2)).findAll(any(Pageable.class));
         verifyNoMoreInteractions(repository);
     }
@@ -34,7 +34,7 @@ class UserSearchTest {
     void suppliedFilterUsesSpecification() {
         when(repository.findAll(org.mockito.ArgumentMatchers.<Specification<User>>any(), any(Pageable.class)))
                 .thenReturn(Page.empty());
-        service.search(Map.of("role", "MEMBER"), 0);
+        service.search(Map.of("username", "an"), 0);
         verify(repository).findAll(org.mockito.ArgumentMatchers.<Specification<User>>any(), any(Pageable.class));
         verifyNoMoreInteractions(repository);
     }

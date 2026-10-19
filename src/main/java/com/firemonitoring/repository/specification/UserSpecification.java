@@ -16,25 +16,18 @@ public final class UserSpecification {
     public static Specification<User> from(UserSearchBuilder criteria) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
-            if (criteria.getId() != null) {
-                predicates.add(cb.equal(root.get("id"), criteria.getId()));
-            }
             if (criteria.getUsername() != null) {
                 predicates.add(cb.like(cb.lower(root.get("username")), contains(criteria.getUsername()), '!'));
             }
             if (criteria.getFullName() != null) {
                 predicates.add(cb.like(cb.lower(root.get("fullName")), contains(criteria.getFullName()), '!'));
             }
-            if (criteria.getPhone() != null) {
-                predicates.add(cb.equal(root.get("phone"), criteria.getPhone()));
-            }
             if (criteria.getCccd() != null) {
-                predicates.add(cb.equal(root.get("cccd"), criteria.getCccd()));
+                predicates.add(cb.like(root.get("cccd"), contains(criteria.getCccd()), '!'));
             }
-            if (criteria.getRole() != null) {
-                predicates.add(cb.equal(root.get("role"), criteria.getRole()));
-            }
-            return cb.and(predicates.toArray(new Predicate[0]));
+            return predicates.isEmpty()
+                    ? cb.conjunction()
+                    : cb.or(predicates.toArray(new Predicate[0]));
         };
     }
 

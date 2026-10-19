@@ -1,0 +1,52 @@
+@media (min-width: 1600px) {
+  .workspace { padding: 24px 32px; }
+  .auth-layout { padding-top: 40px; }
+}
+@media (min-width: 768px) and (max-width: 1199px) {
+  .auth-story h1 { font-size: 43px; }
+  .auth-story { min-height: 560px; }
+  .story-features { gap: 10px; flex-wrap: wrap; }
+  .auth-card > .ant-card-body { padding: 26px; }
+  .app-header .brand strong { font-size: 19px; }
+  .workspace { padding: 16px; }
+}
+@media (max-width: 767px) {
+  .public-header { padding: 20px 6%; }
+  .brand img { width: 29px; height: 37px; }
+  .brand strong { font-size: 19px; }
+  .brand small { font-size: 10px; }
+  .quote, .story-column { display: none; }
+  .auth-layout { padding: 12px 6% 24px; min-height: calc(100svh - 145px); }
+  .auth-card { max-width: 530px; margin: auto; }
+  .auth-card > .ant-card-body { padding: 26px; }
+  .auth-card h2.ant-typography { font-size: 27px; }
+  .auth-footer { gap: 20px; font-size: 10px; }
+  .app-header.ant-layout-header { height: 70px; padding: 0 10px; gap: 6px; }
+  .app-header .brand strong { font-size: 16px; letter-spacing: -.5px; }
+  .app-header .brand small, .account-name { display: none; }
+  .app-header .brand { gap: 7px; }
+  .app-header .brand img { width: 24px; height: 32px; }
+  .account-button.ant-btn { padding: 4px; gap: 5px; }
+  .menu-toggle.ant-btn { width: 38px; flex-shrink: 0; }
+  .workspace { margin-top: 70px; padding: 12px; }
+  .page-banner { padding: 24px 21px; min-height: 155px; background-position: center, 65% 65%; }
+  .page-banner h1.ant-typography { font-size: 27px; }
+  .page-banner .ant-typography:not(h1) { max-width: 280px; font-size: 12px; }
+  .ant-card .ant-card-body { padding: 20px; }
+  .section-toolbar { gap: 14px; }
+  .section-toolbar h2.ant-typography { font-size: 21px; }
+  .section-toolbar > .ant-btn, .create-house-link, .create-house-link > .ant-btn { width: 100%; }
+  .form-actions > .ant-btn { flex: 1; }
+  .profile-action { width: 100%; }
+  .profile-action > .ant-btn { width: 100%; }
+  .ant-pagination { flex-wrap: wrap; row-gap: 10px; }
+  .ant-pagination-total-text { width: 100%; }
+  .sidebar-message { margin-top: 100px; }
+  .illustration-column { display: none; }
+}
+@media (max-width: 380px) {
+  .app-header .brand strong { font-size: 13px; }
+  .app-header .brand img { display: none; }
+  .auth-card > .ant-card-body { padding: 22px; }
+  .auth-footer span { display: none; }
+}

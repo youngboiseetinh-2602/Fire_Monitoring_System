@@ -32,7 +32,7 @@ public class userRequest {
     private String phone;
 
     @NotBlank(message = "CCCD is required")
-    @Size(max = 20, message = "CCCD must not exceed 20 characters")
+    @Pattern(regexp = "[0-9]{12}", message = "CCCD must contain exactly 12 digits")
     private String cccd;
 
     @NotNull(message = "Role is required")

@@ -4,6 +4,7 @@ import com.firemonitoring.converter.JwtAuthenticationConverter;
 import com.firemonitoring.entity.User;
 import com.firemonitoring.repository.UserRepository;
 import com.firemonitoring.security.JwtProvider;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -63,16 +64,23 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http,
             AuthenticationProvider authenticationProvider,
-            JwtAuthenticationConverter jwtAuthenticationConverter) throws Exception {
+            JwtAuthenticationConverter jwtAuthenticationConverter,
+            @Value("${APP_SECURITY_ENABLED:true}") boolean securityEnabled) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(Customizer.withDefaults())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authenticationProvider(authenticationProvider)
-                .authorizeHttpRequests(authorize -> authorize
-                        .requestMatchers("/public/**", "/error", "/actuator/health").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/users").hasRole("ADMIN")
-                        .anyRequest().authenticated())
+                .authorizeHttpRequests(authorize -> {
+                    if (securityEnabled) {
+                        authorize.requestMatchers("/public/**", "/error", "/actuator/health").permitAll()
+                                .requestMatchers(HttpMethod.GET, "/users").hasRole("ADMIN")
+                                .anyRequest().authenticated();
+                    } else {
+                        // Local API testing without requiring a token or role.
+                        authorize.anyRequest().permitAll();
+                    }
+                })
                 .oauth2ResourceServer(resourceServer -> resourceServer
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)));
 

@@ -17,15 +17,32 @@ class UserSearchRepositoryTest {
     private UserRepository repository;
 
     @Test
-    void combinesFiltersAndPaginatesMatchingUsers() {
-        User member = save("an", "Nguyen An", UserRole.MEMBER, "001", "091");
-        save("owner", "Nguyen An", UserRole.OWNER, "002", "092");
-        var criteria = UserSearchBuilder.builder().setFullName("NGUYEN")
-                .setRole(UserRole.MEMBER).setPhone("091").setCccd("001").setId(member.getId()).build();
-        var result = repository.findAll(UserSpecification.from(criteria), PageRequest.of(0, 20));
-        assertEquals(1, result.getTotalElements());
-        assertEquals(member.getId(), result.getContent().getFirst().getId());
-        assertEquals(0, repository.findAll(UserSpecification.from(criteria), PageRequest.of(1, 20)).getNumberOfElements());
+    void matchesAnyFilterAndPaginatesWithoutDuplicates() {
+        User usernameMatch = save("an", "Le Minh", UserRole.MEMBER, "123456789012", "091");
+        User nameMatch = save("binh", "Tran Binh", UserRole.MEMBER, "223456789012", "092");
+        User cccdMatch = save("cuong", "Le Cuong", UserRole.MEMBER, "123001145678", "093");
+        User allMatch = save("anh", "Tran Anh", UserRole.MEMBER, "001123456789", "094");
+        save("dung", "Le Dung", UserRole.MEMBER, "323456789012", "095");
+
+        var criteria = UserSearchBuilder.builder().setFullName("TRAN")
+                .setUsername("AN").setCccd("0011").build();
+        var specification = UserSpecification.from(criteria);
+        var result = repository.findAll(specification);
+        assertEquals(4, result.size());
+        assertEquals(java.util.Set.of(usernameMatch.getId(), nameMatch.getId(), cccdMatch.getId(), allMatch.getId()),
+                result.stream().map(User::getId).collect(java.util.stream.Collectors.toSet()));
+        var page = repository.findAll(specification, PageRequest.of(0, 2));
+        assertEquals(4, page.getTotalElements());
+        assertEquals(2, page.getTotalPages());
+        assertEquals(2, page.getNumberOfElements());
+        assertEquals(0, repository.findAll(specification, PageRequest.of(2, 2)).getNumberOfElements());
+    }
+
+    @Test
+    void emptyCriteriaReturnsAllUsers() {
+        save("an", "Nguyen An", UserRole.MEMBER, "001234567890", "091");
+        save("binh", "Tran Binh", UserRole.MEMBER, "001234567891", "092");
+        assertEquals(2, repository.findAll(UserSpecification.from(UserSearchBuilder.builder().build())).size());
     }
 
     @Test
@@ -36,6 +53,22 @@ class UserSearchRepositoryTest {
         var result = repository.findAll(UserSpecification.from(criteria));
         assertEquals(1, result.size());
         assertEquals("user_%!", result.getFirst().getUsername());
+    }
+
+    @Test
+    void findsCccdContainingDigitsAnywhere() {
+        User first = save("first", "An", UserRole.MEMBER, "001123456789", "095");
+        User middle = save("middle", "Binh", UserRole.MEMBER, "123001145678", "096");
+        User last = save("last", "Cuong", UserRole.MEMBER, "123456780011", "097");
+        save("other", "Dung", UserRole.MEMBER, "123456789012", "098");
+
+        var criteria = UserSearchBuilder.builder().setCccd("0011").build();
+        var result = repository.findAll(UserSpecification.from(criteria));
+        assertEquals(java.util.Set.of(first.getId(), middle.getId(), last.getId()),
+                result.stream().map(User::getId).collect(java.util.stream.Collectors.toSet()));
+
+        var wildcard = UserSearchBuilder.builder().setCccd("%").build();
+        assertEquals(0, repository.findAll(UserSpecification.from(wildcard)).size());
     }
 
     private User save(String username, String name, UserRole role, String cccd, String phone) {

@@ -1,0 +1,20 @@
+@keyframes page-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes safe-glow { 50% { box-shadow: 0 0 0 4px #22c55e12; } }
+@keyframes fire-pulse { 50% { transform: scale(1.1); opacity: .75; } }
+.page-enter { animation: page-in 300ms ease both; }
+.content-stack > .ant-card { animation: page-in 350ms ease both; }
+.content-stack > .ant-card:nth-child(2) { animation-delay: 70ms; }
+.content-stack > .ant-card:nth-child(3) { animation-delay: 140ms; }
+.ant-btn { transition: transform 250ms ease, box-shadow 250ms ease, background 250ms ease; }
+.ant-btn:not(:disabled):not(.ant-btn-loading):hover { transform: translateY(-2px); box-shadow: 0 5px 15px #a2511515; }
+.ant-btn:not(:disabled):active { transform: scale(.98); }
+.illustration-card, .profile-card { transition: transform 250ms ease, box-shadow 250ms ease; }
+.illustration-card:hover, .profile-card:hover { transform: translateY(-3px); box-shadow: 0 10px 32px #ab683015; }
+.ant-input, .ant-input-affix-wrapper { transition: border-color 250ms ease, box-shadow 250ms ease; }
+.ant-form-item-explain-error { animation: page-in 250ms ease; }
+.ant-table-tbody { animation: page-in 300ms ease; }
+.status-NORMAL .status-dot { animation: safe-glow 2.5s ease infinite; }
+.status-FIRE .anticon { animation: fire-pulse 2s ease infinite; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
