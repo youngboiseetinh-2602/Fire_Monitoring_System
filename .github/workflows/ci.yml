@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend tests and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      MQTT_ENABLED: 'false'
+      APP_SECURITY_ENABLED: 'true'
+      # Test-only value; never use this as a deployment secret.
+      FIRE_JWT_SECRET: ci-test-only-secret-at-least-32-bytes
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Run tests and package Spring Boot
+        run: mvn --batch-mode --no-transfer-progress clean verify
+
+  frontend:
+    name: Frontend tests and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Run API client tests
+        run: npm test
+      - name: Build frontend
+        run: npm run build
+
+  docker:
+    name: Docker build (${{ matrix.component }})
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - component: backend
+            context: .
+          - component: frontend
+            context: ./frontend
+    steps:
+      - uses: actions/checkout@v6
+      - name: Validate Compose configuration
+        run: docker compose config --quiet
+      - name: Build image without publishing
+        run: docker build --tag fire-monitoring-${{ matrix.component }}:ci ${{ matrix.context }}
