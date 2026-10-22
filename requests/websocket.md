@@ -35,7 +35,14 @@ must handle repeated START commands idempotently (do not spawn duplicate loops).
 
 The kit stays connected to the MQTT broker and subscribes to:
 
-`fire-monitor/kits/{kitId}/commands`
+`fire-monitor/kits/{deviceUid}/commands`
+
+`deviceUid` is the registered hardware identifier (for example `ESP32-001`),
+not the generated numeric `kits.id`. Firmware must subscribe/publish using this
+exact identifier, including case. Numeric HTTP kit IDs remain unchanged; the
+backend resolves them to deviceUid before publishing commands. Existing firmware
+using database IDs in MQTT topics must be updated. Unknown device UIDs are ignored.
+Device UIDs must be 1-100 characters without whitespace, `/`, `+`, `#`, or NUL.
 
 BE sends this non-retained command with QoS 1:
 
@@ -45,7 +52,7 @@ BE sends this non-retained command with QoS 1:
 
 The kit then publishes readings continuously to:
 
-`fire-monitor/kits/{kitId}/telemetry`
+`fire-monitor/kits/{deviceUid}/telemetry`
 
 ```json
 {"temperature":35.5,"humidity":70.2,"gas":620,"flame":false}

@@ -44,6 +44,113 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 // Exercises controller, validation, mapping and persistence; security filters are excluded.
 @DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=create-drop")
 class HouseIntegrationTest {
+    @org.junit.jupiter.api.AfterEach
+    void clearKitAuthentication() {
+        org.springframework.security.core.context.SecurityContextHolder.clearContext();
+    }
+
+    private void authenticateKitAdmin() {
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
+                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                        "admin", "unused", List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_ADMIN"))));
+    }
+
+    @Test
+    void commandApiResolvesDatabaseIdToDeviceUid() throws Exception {
+        House house = saveDataHouse("Command house");
+        Kit kit = saveDataKit(saveDataLocation(house, "Room"), "ESP32-ABC");
+        mvc.perform(put("/kits/{kitId}/command", kit.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"buzz\":true,\"pump\":false,\"led\":true}"))
+                .andExpect(status().isAccepted());
+        verify(commandPublisher).sendCommand(eq("ESP32-ABC"), any());
+    }
+
+    @Test
+    void numericDatabaseIdIsNotUsedAsTelemetryFallback() {
+        House house = saveDataHouse("No fallback");
+        Kit kit = saveDataKit(saveDataLocation(house, "Room"), "ESP32-NON-NUMERIC");
+        sendReading(kit.getId().toString(), 123);
+        verifyNoInteractions(messagingTemplate);
+    }
+
+    @Test
+    void rejectsTopicWildcardsInDeviceUid() throws Exception {
+        authenticateKitAdmin();
+        House house = saveDataHouse("Invalid device");
+        long before = locationRepository.count();
+        for (String uid : List.of("a/b", "a+b", "a#b", "a b")) {
+            mvc.perform(post("/houses/{houseId}/kits", house.getId())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"location\":\"Room\",\"deviceUid\":\"" + uid + "\"}"))
+                    .andExpect(status().isBadRequest());
+        }
+        assertEquals(before, locationRepository.count());
+    }
+
+    @Test
+    void addsKitAndNewLocationToRequestedHouse() throws Exception {
+        authenticateKitAdmin();
+        House house = saveDataHouse("New kit house");
+        mvc.perform(post("/houses/{houseId}/kits", house.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"location\":\" Kitchen \",\"deviceUid\":\" KIT-001 \"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("deviceUid").value("KIT-001"))
+                .andExpect(jsonPath("location").value("Kitchen"))
+                .andExpect(jsonPath("status").value("OFFLINE"));
+        Kit saved = kitRepository.findByDeviceUid("KIT-001").orElseThrow();
+        assertEquals(house.getId(), saved.getLocation().getHouse().getId());
+        assertEquals("Kitchen", saved.getLocation().getLocationName());
+        verifyNoInteractions(commandPublisher);
+    }
+
+    @Test
+    void rejectsDuplicateDeviceOrLocationWithoutAddingRows() throws Exception {
+        authenticateKitAdmin();
+        House house = saveDataHouse("Duplicate kit house");
+        saveDataKit(saveDataLocation(house, "Kitchen"), "existing-device");
+        long locationsBefore = locationRepository.count();
+        long kitsBefore = kitRepository.count();
+        for (String body : List.of(
+                "{\"location\":\"Bedroom\",\"deviceUid\":\"existing-device\"}",
+                "{\"location\":\"Kitchen\",\"deviceUid\":\"new-device\"}")) {
+            mvc.perform(post("/houses/{houseId}/kits", house.getId())
+                            .contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isConflict());
+        }
+        assertEquals(locationsBefore, locationRepository.count());
+        assertEquals(kitsBefore, kitRepository.count());
+    }
+
+    @Test
+    void rejectsInvalidKitInputAndMissingHouse() throws Exception {
+        authenticateKitAdmin();
+        for (String body : List.of("{}", "{\"location\":\" \",\"deviceUid\":\"kit\"}",
+                "{\"location\":\"Room\",\"deviceUid\":\"" + "x".repeat(101) + "\"}")) {
+            mvc.perform(post("/houses/1/kits").contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isBadRequest());
+        }
+        mvc.perform(post("/houses/{houseId}/kits", Long.MAX_VALUE)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"location\":\"Room\",\"deviceUid\":\"kit\"}"))
+                .andExpect(status().isNotFound());
+        mvc.perform(post("/houses/0/kits").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"location\":\"Room\",\"deviceUid\":\"kit\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void rejectsNonAdminAddingKit() throws Exception {
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
+                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                        "member", "unused", List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_MEMBER"))));
+        long before = locationRepository.count();
+        mvc.perform(post("/houses/1/kits").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"location\":\"Room\",\"deviceUid\":\"kit\"}"))
+                .andExpect(status().isForbidden());
+        assertEquals(before, locationRepository.count());
+    }
     @Autowired
     private HouseRepository repository;
     @Autowired
@@ -76,7 +183,7 @@ class HouseIntegrationTest {
     void publishesMqttReadingsToTheMatchingHouseDestination() {
         House house = saveDataHouse("Stream house");
         Kit kit = saveDataKit(saveDataLocation(house, "Kitchen"), "stream-device");
-        sendReading(kit.getId(), 432);
+        sendReading(kit.getDeviceUid(), 432);
         verify(messagingTemplate).convertAndSend(eq("/topic/houses/" + house.getId() + "/data"),
                 org.mockito.ArgumentMatchers.<Object>argThat(value -> value instanceof com.firemonitoring.model.response.DataResponse data
                         && data.getGas() == 432 && data.getTemperature() == 35.5f && data.getHumidity() == 70.2f && data.isFlame() && data.getStatus() == com.firemonitoring.enums.EventType.NORMAL && data.getLocation().equals("Kitchen")));
@@ -98,7 +205,7 @@ class HouseIntegrationTest {
                     .andExpect(status().isAccepted())
                     .andExpect(content().json("[" + kit.getId() + "]"));
             mvc.perform(post("/house/999999/kit")).andExpect(status().isNotFound());
-            verify(commandPublisher).startTelemetry(kit.getId());
+            verify(commandPublisher).startTelemetry(kit.getDeviceUid());
             verifyNoMoreInteractions(commandPublisher);
             verifyNoInteractions(members);
         } finally {
@@ -125,7 +232,7 @@ class HouseIntegrationTest {
 
     @Test
     void ignoresUnknownKit() {
-        sendReading(999999L, 123);
+        sendReading("unknown-device", 123);
         verifyNoInteractions(messagingTemplate);
     }
     private ObjectNode body() {
@@ -148,8 +255,8 @@ class HouseIntegrationTest {
                 .andExpect(status().isAccepted())
                 .andExpect(jsonPath("$", org.hamcrest.Matchers.containsInAnyOrder(
                         kitchen.getId().intValue(), bedroom.getId().intValue())));
-        verify(commandPublisher).startTelemetry(kitchen.getId());
-        verify(commandPublisher).startTelemetry(bedroom.getId());
+        verify(commandPublisher).startTelemetry(kitchen.getDeviceUid());
+        verify(commandPublisher).startTelemetry(bedroom.getDeviceUid());
         verifyNoMoreInteractions(commandPublisher);
         verifyNoInteractions(messagingTemplate);
     }
@@ -171,7 +278,7 @@ class HouseIntegrationTest {
         House house = saveDataHouse("Unavailable house");
         Kit kit = saveDataKit(saveDataLocation(house, "Kitchen"), "unavailable-kit");
         doThrow(new ServiceUnavailableException("MQTT unavailable"))
-                .when(commandPublisher).startTelemetry(kit.getId());
+                .when(commandPublisher).startTelemetry(kit.getDeviceUid());
         belongsTo(house);
         mvc.perform(post("/me/house/kit"))
                 .andExpect(status().isServiceUnavailable());
@@ -207,8 +314,8 @@ class HouseIntegrationTest {
                 .andExpect(status().isAccepted())
                 .andExpect(jsonPath("$", org.hamcrest.Matchers.containsInAnyOrder(
                         firstKit.getId().intValue(), secondKit.getId().intValue())));
-        verify(commandPublisher).startTelemetry(firstKit.getId());
-        verify(commandPublisher).startTelemetry(secondKit.getId());
+        verify(commandPublisher).startTelemetry(firstKit.getDeviceUid());
+        verify(commandPublisher).startTelemetry(secondKit.getDeviceUid());
         verifyNoMoreInteractions(commandPublisher);
     }
     private House saveDataHouse(String name) {
@@ -234,10 +341,10 @@ class HouseIntegrationTest {
         return kitRepository.saveAndFlush(kit);
     }
 
-    private void sendReading(long kitId, int gas) {
+    private void sendReading(String deviceUid, int gas) {
         new MqttDataListener(new ObjectMapper(), kitService).handle(MessageBuilder
                 .withPayload("{\"temperature\":35.5,\"humidity\":70.2,\"gas\":" + gas + ",\"flame\":true}")
-                .setHeader(MqttHeaders.RECEIVED_TOPIC, "fire-monitor/kits/" + kitId + "/telemetry")
+                .setHeader(MqttHeaders.RECEIVED_TOPIC, "fire-monitor/kits/" + deviceUid + "/telemetry")
                 .build());
     }
 

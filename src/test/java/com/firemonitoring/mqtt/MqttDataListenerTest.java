@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class MqttDataListenerTest {
-    private static final String TOPIC = "fire-monitor/kits/1/telemetry";
+    private static final String TOPIC = "fire-monitor/kits/ESP32-001/telemetry";
     private static final String PAYLOAD =
             "{\"temperature\":35.5,\"humidity\":70.2,\"gas\":620,\"flame\":false}";
     private final ObjectMapper mapper = new ObjectMapper();
@@ -24,18 +24,18 @@ class MqttDataListenerTest {
     @Test
     void forwardsOnlyValidReadingsToService() {
         listener.handle(MessageBuilder.withPayload(PAYLOAD).setHeader(MqttHeaders.RECEIVED_TOPIC, TOPIC).build());
-        verify(kitService).updateData(1L, new DataRequest(35.5f, 70.2f, 620, false));
+        verify(kitService).updateData("ESP32-001", new DataRequest(35.5f, 70.2f, 620, false));
         listener.handle(MessageBuilder.withPayload(PAYLOAD.replace("620", "700"))
                 .setHeader(MqttHeaders.RECEIVED_TOPIC, TOPIC).build());
         listener.handle(MessageBuilder.withPayload("{}").setHeader(MqttHeaders.RECEIVED_TOPIC, TOPIC).build());
-        verify(kitService).updateData(1L, new DataRequest(35.5f, 70.2f, 700, false));
+        verify(kitService).updateData("ESP32-001", new DataRequest(35.5f, 70.2f, 700, false));
         verifyNoMoreInteractions(kitService);
     }
 
     @Test
     void readsKitIdAndSensorValues() {
         var telemetry = listener.read(TOPIC, PAYLOAD).orElseThrow();
-        assertEquals(1L, telemetry.kitId());
+        assertEquals("ESP32-001", telemetry.deviceUid());
         assertEquals(35.5f, telemetry.data().temperature());
         assertEquals(70.2f, telemetry.data().humidity());
         assertEquals(620, telemetry.data().gas());
@@ -54,8 +54,8 @@ class MqttDataListenerTest {
 
     @ParameterizedTest
     @ValueSource(strings = {
-            "", "fire-monitor/kits/0/telemetry", "fire-monitor/kits/-1/telemetry",
-            "fire-monitor/kits/abc/telemetry", "fire-monitor/kits/9223372036854775808/telemetry",
+            "", "fire-monitor/kits//telemetry", "fire-monitor/kits/+/telemetry",
+            "fire-monitor/kits/#/telemetry", "fire-monitor/kits/bad uid/telemetry",
             "fire-monitor/kits/1/telemetry/extra", "other/kits/1/telemetry"
     })
     void rejectsInvalidTopics(String topic) {

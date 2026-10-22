@@ -1,0 +1,16 @@
+@baseUrl = http://localhost:8080
+@houseId = 1
+@adminToken = REPLACE_WITH_ADMIN_JWT
+
+### Create a new location and assign a device to it (ADMIN only).
+# deviceUid is the hardware identifier, NOT the generated numeric kits.id.
+# 201: created; 400: invalid input; 403: not admin; 404: house missing;
+# 409: duplicate deviceUid or location name within the house.
+POST {{baseUrl}}/houses/{{houseId}}/kits
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "location": "Phong khach",
+  "deviceUid": "KIT-001"
+}

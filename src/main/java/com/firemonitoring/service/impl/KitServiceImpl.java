@@ -1,6 +1,10 @@
 package com.firemonitoring.service.impl;
 
 import com.firemonitoring.entity.Location;
+import com.firemonitoring.entity.Kit;
+import com.firemonitoring.exception.ConflictException;
+import com.firemonitoring.model.request.AddKitRequest;
+import com.firemonitoring.model.response.AddKitResponse;
 import com.firemonitoring.repository.HouseMemberRepository;
 import com.firemonitoring.security.CurrentUserProvider;
 import com.firemonitoring.enums.EventType;
@@ -38,9 +42,53 @@ public class KitServiceImpl implements KitService {
     private final CurrentUserProvider currentUserProvider;
 
     @Override
+    @Transactional
+    public AddKitResponse addKit(long houseId, AddKitRequest request) {
+        requireAdmin();
+        if (houseId <= 0 || request == null || request.location() == null
+                || request.deviceUid() == null || request.location().isBlank()
+                || request.deviceUid().isBlank() || request.location().length() > 100
+                || request.deviceUid().length() > 100) {
+            throw new IllegalArgumentException("Provide a positive house ID, location and device UID (max 100 characters)");
+        }
+        var house = houseRepository.findById(houseId)
+                .orElseThrow(() -> new DataNotFoundException("House not found"));
+        String locationName = request.location().strip();
+        String deviceUid = request.deviceUid().strip();
+        if (!deviceUid.matches("[^/+#\\s\\x00]{1,100}")) {
+            throw new IllegalArgumentException("Invalid MQTT device UID");
+        }
+        if (kitRepository.findByDeviceUid(deviceUid).isPresent()) {
+            throw new ConflictException("Device UID already exists");
+        }
+        if (locationRepository.existsByHouseIdAndLocationName(houseId, locationName)) {
+            throw new ConflictException("Location already exists in this house");
+        }
+        Location location = new Location();
+        location.setHouse(house);
+        location.setLocationName(locationName);
+        location = locationRepository.saveAndFlush(location);
+        Kit kit = new Kit();
+        kit.setDeviceUid(deviceUid);
+        kit.setLocation(location);
+        kit = kitRepository.saveAndFlush(kit);
+        return new AddKitResponse(kit.getId(), kit.getDeviceUid(), houseId,
+                location.getId(), location.getLocationName(), kit.getStatus());
+    }
+
+    private void requireAdmin() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()
+                || authentication.getAuthorities().stream()
+                .noneMatch(authority -> "ROLE_ADMIN".equals(authority.getAuthority()))) {
+            throw new AccessDeniedException("Only admins can manage kits by house ID");
+        }
+    }
+
+    @Override
     @Transactional(readOnly = true)
-    public void updateData(long kitId, DataRequest data) {
-        kitRepository.findById(kitId).ifPresent(kit -> {
+    public void updateData(String deviceUid, DataRequest data) {
+        kitRepository.findByDeviceUid(deviceUid).filter(kit -> deviceUid.equals(kit.getDeviceUid())).ifPresent(kit -> {
             Location location = kit.getLocation();
             houseDataPublisher.publish(location.getHouse().getId(), toResponse(location, data));
         });
@@ -83,10 +131,10 @@ public class KitServiceImpl implements KitService {
         List<Long> kitIds = new ArrayList<>();
         for (Location location : locationRepository.findByHouseId(houseId)) {
             kitRepository.findByLocationId(location.getId())
-                    .ifPresent(kit -> kitIds.add(kit.getId()));
-        }
-        for (Long kitId : kitIds) {
-            commandPublisher.startTelemetry(kitId);
+                    .ifPresent(kit -> {
+                        kitIds.add(kit.getId());
+                        commandPublisher.startTelemetry(kit.getDeviceUid());
+                    });
         }
         return kitIds;
     }
@@ -94,10 +142,9 @@ public class KitServiceImpl implements KitService {
     @Override
     @Transactional(readOnly = true)
     public String sendCommand(long kitId, kitCommand command) {
-        if (!kitRepository.existsById(kitId)) {
-            throw new DataNotFoundException("Kit not found");
-        }
-        commandPublisher.sendCommand(kitId, command);
+        Kit kit = kitRepository.findById(kitId)
+                .orElseThrow(() -> new DataNotFoundException("Kit not found"));
+        commandPublisher.sendCommand(kit.getDeviceUid(), command);
         return "Command sent successfully";
     }
 

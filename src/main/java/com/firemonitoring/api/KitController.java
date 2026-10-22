@@ -1,6 +1,9 @@
 package com.firemonitoring.api;
 
 import com.firemonitoring.model.request.kitCommand;
+import com.firemonitoring.model.request.AddKitRequest;
+import com.firemonitoring.model.response.AddKitResponse;
+import jakarta.validation.Valid;
 import com.firemonitoring.service.KitService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -15,6 +18,13 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class KitController {
     private final KitService kitService;
+
+    @PostMapping("/houses/{houseId}/kits")
+    public ResponseEntity<AddKitResponse> addKit(
+            @PathVariable long houseId,
+            @Valid @RequestBody AddKitRequest request) {
+        return ResponseEntity.status(201).body(kitService.addKit(houseId, request));
+    }
 
     @PostMapping("/house/{houseId}/kit")
     public ResponseEntity<List<Long>> getHouseKit(@PathVariable("houseId") long houseId) {

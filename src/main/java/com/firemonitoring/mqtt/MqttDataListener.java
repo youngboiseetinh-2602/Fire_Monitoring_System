@@ -21,7 +21,7 @@ import java.util.regex.Pattern;
 public class MqttDataListener {
     private static final Logger log = LoggerFactory.getLogger(MqttDataListener.class);
     private static final Pattern TELEMETRY_TOPIC =
-            Pattern.compile("fire-monitor/kits/([1-9][0-9]*)/telemetry");
+            Pattern.compile("fire-monitor/kits/([^/+#\\s\\x00]{1,100})/telemetry");
 
     private final ObjectReader jsonReader;
     private final KitService kitService;
@@ -40,8 +40,8 @@ public class MqttDataListener {
         }
 
         read(topicText, payload).ifPresent(telemetry -> {
-            kitService.updateData(telemetry.kitId(), telemetry.data());
-            log.debug("Validated MQTT telemetry for kit {}", telemetry.kitId());
+            kitService.updateData(telemetry.deviceUid(), telemetry.data());
+            log.debug("Validated MQTT telemetry for kit {}", telemetry.deviceUid());
         });
     }
 
@@ -51,7 +51,7 @@ public class MqttDataListener {
             if (!matcher.matches()) {
                 throw new IllegalArgumentException("Invalid telemetry topic");
             }
-            long kitId = Long.parseLong(matcher.group(1));
+            String deviceUid = matcher.group(1);
             JsonNode json = jsonReader.readTree(payload);
             if (json == null || !json.isObject()) {
                 throw new IllegalArgumentException("Payload must be a JSON object");
@@ -72,7 +72,7 @@ public class MqttDataListener {
             }
 
             DataRequest data = new DataRequest(temperature, humidity, gas.intValue(), flame.booleanValue());
-            return Optional.of(new Telemetry(kitId, data));
+            return Optional.of(new Telemetry(deviceUid, data));
         } catch (JsonProcessingException | IllegalArgumentException ex) {
             // Do not log raw payloads or parser messages containing untrusted input.
             log.warn("Ignoring invalid MQTT telemetry: malformed topic or sensor data");
@@ -88,5 +88,5 @@ public class MqttDataListener {
         return value.floatValue();
     }
 
-    public record Telemetry(long kitId, DataRequest data) {}
+    public record Telemetry(String deviceUid, DataRequest data) {}
 }

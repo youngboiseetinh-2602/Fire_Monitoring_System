@@ -20,10 +20,10 @@ class MqttCommandPublisherTest {
         MessageChannel channel = mock(MessageChannel.class);
         when(channel.send(any())).thenReturn(true);
         beans.registerSingleton("mqttCommandChannel", channel);
-        new MqttCommandPublisher(beans.getBeanProvider(MessageChannel.class)).startTelemetry(12L);
+        new MqttCommandPublisher(beans.getBeanProvider(MessageChannel.class)).startTelemetry("ESP32-012");
         verify(channel).send(argThat(message ->
                 "{\"command\":\"START_TELEMETRY\"}".equals(message.getPayload())
-                        && "fire-monitor/kits/12/commands".equals(message.getHeaders().get(MqttHeaders.TOPIC))
+                        && "fire-monitor/kits/ESP32-012/commands".equals(message.getHeaders().get(MqttHeaders.TOPIC))
                         && Integer.valueOf(1).equals(message.getHeaders().get(MqttHeaders.QOS))
                         && Boolean.FALSE.equals(message.getHeaders().get(MqttHeaders.RETAINED))));
     }
@@ -38,11 +38,11 @@ class MqttCommandPublisherTest {
         command.setPump(false);
         command.setLed(true);
 
-        new MqttCommandPublisher(beans.getBeanProvider(MessageChannel.class)).sendCommand(7L, command);
+        new MqttCommandPublisher(beans.getBeanProvider(MessageChannel.class)).sendCommand("ESP32-007", command);
 
         verify(channel).send(argThat(message ->
                 "{\"buzz\":true,\"pump\":false,\"led\":true}".equals(message.getPayload())
-                        && "fire-monitor/kits/7/commands".equals(message.getHeaders().get(MqttHeaders.TOPIC))
+                        && "fire-monitor/kits/ESP32-007/commands".equals(message.getHeaders().get(MqttHeaders.TOPIC))
                         && Integer.valueOf(1).equals(message.getHeaders().get(MqttHeaders.QOS))
                         && Boolean.FALSE.equals(message.getHeaders().get(MqttHeaders.RETAINED))));
     }
@@ -50,7 +50,7 @@ class MqttCommandPublisherTest {
     @Test
     void failsExplicitlyWhenMqttDisabled() {
         var publisher = new MqttCommandPublisher(beans.getBeanProvider(MessageChannel.class));
-        assertThrows(ServiceUnavailableException.class, () -> publisher.startTelemetry(1L));
+        assertThrows(ServiceUnavailableException.class, () -> publisher.startTelemetry("ESP32-001"));
     }
 
     @Test
@@ -59,8 +59,8 @@ class MqttCommandPublisherTest {
         beans.registerSingleton("mqttCommandChannel", channel);
         var publisher = new MqttCommandPublisher(beans.getBeanProvider(MessageChannel.class));
         when(channel.send(any())).thenReturn(false);
-        assertThrows(ServiceUnavailableException.class, () -> publisher.startTelemetry(1L));
+        assertThrows(ServiceUnavailableException.class, () -> publisher.startTelemetry("ESP32-001"));
         when(channel.send(any())).thenThrow(new MessageDeliveryException("Broker disconnected"));
-        assertThrows(ServiceUnavailableException.class, () -> publisher.startTelemetry(1L));
+        assertThrows(ServiceUnavailableException.class, () -> publisher.startTelemetry("ESP32-001"));
     }
 }
