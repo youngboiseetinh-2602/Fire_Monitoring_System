@@ -3,11 +3,28 @@ package com.firemonitoring.api;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.firemonitoring.entity.House;
+import com.firemonitoring.entity.Location;
+import com.firemonitoring.entity.Kit;
+import com.firemonitoring.repository.LocationRepository;
+import com.firemonitoring.repository.KitRepository;
+import com.firemonitoring.mqtt.MqttCommandPublisher;
+import com.firemonitoring.config.ModelMapperConfig;
+import com.firemonitoring.exception.ServiceUnavailableException;
+import com.firemonitoring.websocket.HouseDataPublisher;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+import com.firemonitoring.mqtt.MqttDataListener;
+import org.springframework.integration.mqtt.support.MqttHeaders;
+import org.springframework.messaging.support.MessageBuilder;
 import com.firemonitoring.converter.SearchBuilderConverter;
 import com.firemonitoring.enums.HouseStatus;
 import com.firemonitoring.exception.GlobalException;
 import com.firemonitoring.repository.HouseRepository;
+import com.firemonitoring.repository.HouseMemberRepository;
+import com.firemonitoring.entity.HouseMember;
+import java.util.List;
+import com.firemonitoring.security.CurrentUserProvider;
 import com.firemonitoring.service.impl.HouseServiceImpl;
+import com.firemonitoring.service.impl.KitServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -20,6 +37,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -28,19 +46,199 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class HouseIntegrationTest {
     @Autowired
     private HouseRepository repository;
+    @Autowired
+    private LocationRepository locationRepository;
+    @Autowired
+    private KitRepository kitRepository;
+    private MqttCommandPublisher commandPublisher;
+    private HouseDataPublisher houseDataPublisher;
+    private SimpMessagingTemplate messagingTemplate;
+    private KitServiceImpl kitService;
     private MockMvc mvc;
+    private HouseMemberRepository members;
 
     @BeforeEach
     void setup() {
+        commandPublisher = mock(MqttCommandPublisher.class);
+        messagingTemplate = mock(SimpMessagingTemplate.class);
+        houseDataPublisher = new HouseDataPublisher(messagingTemplate);
+        members = mock(HouseMemberRepository.class);
+        CurrentUserProvider currentUser = () -> 7L;
+        kitService = new KitServiceImpl(repository, locationRepository, kitRepository, houseDataPublisher, commandPublisher, new ModelMapperConfig().modelMapper(), members, currentUser);
         mvc = MockMvcBuilders.standaloneSetup(new HouseController(
-                        new HouseServiceImpl(repository, new ModelMapper(), new SearchBuilderConverter())))
+                        new HouseServiceImpl(repository, new ModelMapper(), new SearchBuilderConverter(),
+                                members, mock(com.firemonitoring.repository.UserRepository.class), currentUser)),
+                        new KitController(kitService))
                 .setControllerAdvice(new GlobalException()).build();
     }
 
+    @Test
+    void publishesMqttReadingsToTheMatchingHouseDestination() {
+        House house = saveDataHouse("Stream house");
+        Kit kit = saveDataKit(saveDataLocation(house, "Kitchen"), "stream-device");
+        sendReading(kit.getId(), 432);
+        verify(messagingTemplate).convertAndSend(eq("/topic/houses/" + house.getId() + "/data"),
+                org.mockito.ArgumentMatchers.<Object>argThat(value -> value instanceof com.firemonitoring.model.response.DataResponse data
+                        && data.getGas() == 432 && data.getTemperature() == 35.5f && data.getHumidity() == 70.2f && data.isFlame() && data.getStatus() == com.firemonitoring.enums.EventType.NORMAL && data.getLocation().equals("Kitchen")));
+        verifyNoMoreInteractions(messagingTemplate);
+    }
+
+    @Test
+    void adminRequestsOnlySelectedHouseWithoutMembership() throws Exception {
+        House house = saveDataHouse("Admin selected house");
+        House other = saveDataHouse("Other house");
+        Kit kit = saveDataKit(saveDataLocation(house, "Kitchen"), "admin-kit");
+        saveDataKit(saveDataLocation(other, "Kitchen"), "other-admin-kit");
+        var context = org.springframework.security.core.context.SecurityContextHolder.createEmptyContext();
+        context.setAuthentication(new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                "admin", null, List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_ADMIN"))));
+        org.springframework.security.core.context.SecurityContextHolder.setContext(context);
+        try {
+            mvc.perform(post("/house/{houseId}/kit", house.getId()))
+                    .andExpect(status().isAccepted())
+                    .andExpect(content().json("[" + kit.getId() + "]"));
+            mvc.perform(post("/house/999999/kit")).andExpect(status().isNotFound());
+            verify(commandPublisher).startTelemetry(kit.getId());
+            verifyNoMoreInteractions(commandPublisher);
+            verifyNoInteractions(members);
+        } finally {
+            org.springframework.security.core.context.SecurityContextHolder.clearContext();
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"ROLE_MEMBER", "ROLE_OWNER", "NONE"})
+    void rejectsNonAdminsBeforeRequestingTelemetry(String role) throws Exception {
+        var context = org.springframework.security.core.context.SecurityContextHolder.createEmptyContext();
+        if (!role.equals("NONE")) {
+            context.setAuthentication(new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                    "viewer", null, List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority(role))));
+        }
+        org.springframework.security.core.context.SecurityContextHolder.setContext(context);
+        try {
+            mvc.perform(post("/house/1/kit")).andExpect(status().isForbidden());
+            verifyNoInteractions(commandPublisher, members);
+        } finally {
+            org.springframework.security.core.context.SecurityContextHolder.clearContext();
+        }
+    }
+
+    @Test
+    void ignoresUnknownKit() {
+        sendReading(999999L, 123);
+        verifyNoInteractions(messagingTemplate);
+    }
     private ObjectNode body() {
         return new ObjectMapper().createObjectNode().put("houseName", "Nha A")
                 .put("city", "Ha Noi").put("ward", "Ba Dinh")
                 .put("addressDetail", "12 Nguyen Thai Hoc");
+    }
+
+    @Test
+    void requestsTelemetryOnlyFromKitsOfRequestedHouse() throws Exception {
+        House house = saveDataHouse("Requested house");
+        House other = saveDataHouse("Other house");
+        Kit kitchen = saveDataKit(saveDataLocation(house, "Kitchen"), "kitchen-kit");
+        Kit bedroom = saveDataKit(saveDataLocation(house, "Bedroom"), "bedroom-kit");
+        saveDataLocation(house, "Empty location");
+        saveDataKit(saveDataLocation(other, "Other room"), "other-kit");
+
+        belongsTo(house);
+        mvc.perform(post("/me/house/kit").param("houseId", other.getId().toString()).param("userId", "99"))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$", org.hamcrest.Matchers.containsInAnyOrder(
+                        kitchen.getId().intValue(), bedroom.getId().intValue())));
+        verify(commandPublisher).startTelemetry(kitchen.getId());
+        verify(commandPublisher).startTelemetry(bedroom.getId());
+        verifyNoMoreInteractions(commandPublisher);
+        verifyNoInteractions(messagingTemplate);
+    }
+
+    @Test
+    void returnsNoKitIdsForEmptyHouseAndNotFoundForMissingHouse() throws Exception {
+        House house = saveDataHouse("Empty house");
+        belongsTo(house);
+        mvc.perform(post("/me/house/kit"))
+                .andExpect(status().isAccepted()).andExpect(content().json("[]"));
+        mvc.perform(post("/me/house")).andExpect(status().isNotFound());
+        mvc.perform(post("/houses/{houseId}/data", house.getId())).andExpect(status().isNotFound());
+        mvc.perform(get("/me/house/kit")).andExpect(status().isMethodNotAllowed());
+        verifyNoInteractions(commandPublisher);
+    }
+
+    @Test
+    void returnsUnavailableWhenMqttCommandFails() throws Exception {
+        House house = saveDataHouse("Unavailable house");
+        Kit kit = saveDataKit(saveDataLocation(house, "Kitchen"), "unavailable-kit");
+        doThrow(new ServiceUnavailableException("MQTT unavailable"))
+                .when(commandPublisher).startTelemetry(kit.getId());
+        belongsTo(house);
+        mvc.perform(post("/me/house/kit"))
+                .andExpect(status().isServiceUnavailable());
+    }
+
+    @Test
+    void rejectsNonMemberBeforeSendingCommandsEvenWithSpoofedUserId() throws Exception {
+        House house = saveDataHouse("Private house");
+        saveDataKit(saveDataLocation(house, "Kitchen"), "private-kit");
+        mvc.perform(post("/me/house/kit").param("houseId", house.getId().toString()).param("userId", "99"))
+                .andExpect(status().isNotFound());
+        verify(members).findByUserId(7L);
+        verifyNoInteractions(commandPublisher);
+    }
+
+    private void belongsTo(House... houses) {
+        List<HouseMember> memberships = java.util.Arrays.stream(houses).map(house -> {
+            HouseMember member = new HouseMember();
+            member.setHouse(house);
+            return member;
+        }).toList();
+        when(members.findByUserId(7L)).thenReturn(memberships);
+    }
+
+    @Test
+    void requestsAllAssociatedHousesWithoutDuplicateCommands() throws Exception {
+        House first = saveDataHouse("First house");
+        House second = saveDataHouse("Second house");
+        Kit firstKit = saveDataKit(saveDataLocation(first, "Kitchen"), "first-kit");
+        Kit secondKit = saveDataKit(saveDataLocation(second, "Kitchen"), "second-kit");
+        belongsTo(first, second, first);
+        mvc.perform(post("/me/house/kit"))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$", org.hamcrest.Matchers.containsInAnyOrder(
+                        firstKit.getId().intValue(), secondKit.getId().intValue())));
+        verify(commandPublisher).startTelemetry(firstKit.getId());
+        verify(commandPublisher).startTelemetry(secondKit.getId());
+        verifyNoMoreInteractions(commandPublisher);
+    }
+    private House saveDataHouse(String name) {
+        House house = new House();
+        house.setHouseName(name);
+        house.setCity("Ha Noi");
+        house.setWard("Ba Dinh");
+        house.setAddressDetail("12 Nguyen Thai Hoc");
+        return repository.saveAndFlush(house);
+    }
+
+    private Location saveDataLocation(House house, String name) {
+        Location location = new Location();
+        location.setHouse(house);
+        location.setLocationName(name);
+        return locationRepository.saveAndFlush(location);
+    }
+
+    private Kit saveDataKit(Location location, String uid) {
+        Kit kit = new Kit();
+        kit.setLocation(location);
+        kit.setDeviceUid(uid);
+        return kitRepository.saveAndFlush(kit);
+    }
+
+    private void sendReading(long kitId, int gas) {
+        new MqttDataListener(new ObjectMapper(), kitService).handle(MessageBuilder
+                .withPayload("{\"temperature\":35.5,\"humidity\":70.2,\"gas\":" + gas + ",\"flame\":true}")
+                .setHeader(MqttHeaders.RECEIVED_TOPIC, "fire-monitor/kits/" + kitId + "/telemetry")
+                .build());
     }
 
     @Test

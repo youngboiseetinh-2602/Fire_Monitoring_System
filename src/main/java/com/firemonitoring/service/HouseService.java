@@ -7,6 +7,10 @@ import org.springframework.data.domain.Page;
 import java.util.Map;
 
 public interface HouseService {
+    String addPeople(com.firemonitoring.model.request.HousePeopleRequest request);
+
+    String removePeople(com.firemonitoring.model.request.HousePeopleRequest request);
+
     Page<houseResponse> findHouse(Map<String, ?> params, int page);
 
     Page<houseResponse> findAll(int page);

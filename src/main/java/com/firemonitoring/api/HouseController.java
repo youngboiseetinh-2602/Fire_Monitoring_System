@@ -4,6 +4,8 @@ import com.firemonitoring.model.request.houseRequest;
 import com.firemonitoring.model.request.houseUpdateRequest;
 import com.firemonitoring.model.response.houseResponse;
 import com.firemonitoring.service.HouseService;
+import com.firemonitoring.model.request.HousePeopleRequest;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -24,6 +26,16 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class HouseController {
     private final HouseService houseService;
+
+    @PostMapping("/me/people")
+    public ResponseEntity<String> addPeople(@RequestBody @Valid HousePeopleRequest request) {
+        return ResponseEntity.ok(houseService.addPeople(request));
+    }
+
+    @DeleteMapping("/me/people")
+    public ResponseEntity<String> removePeople(@RequestBody @Valid HousePeopleRequest request) {
+        return ResponseEntity.ok(houseService.removePeople(request));
+    }
 
     @GetMapping
     public ResponseEntity<Page<houseResponse>> findAll(

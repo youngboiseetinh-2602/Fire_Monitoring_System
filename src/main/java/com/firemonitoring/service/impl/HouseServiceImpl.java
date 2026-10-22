@@ -1,6 +1,15 @@
 package com.firemonitoring.service.impl;
 
 import com.firemonitoring.entity.House;
+import com.firemonitoring.entity.HouseMember;
+import com.firemonitoring.entity.User;
+import com.firemonitoring.enums.UserRole;
+import com.firemonitoring.model.request.HousePeopleRequest;
+import com.firemonitoring.repository.HouseMemberRepository;
+import com.firemonitoring.repository.UserRepository;
+import com.firemonitoring.security.CurrentUserProvider;
+import com.firemonitoring.exception.ConflictException;
+import org.springframework.security.access.AccessDeniedException;
 import com.firemonitoring.builder.HouseSearchBuilder;
 import com.firemonitoring.converter.SearchBuilderConverter;
 import com.firemonitoring.repository.specification.HouseSpecification;
@@ -28,6 +37,66 @@ public class HouseServiceImpl implements HouseService {
     private final HouseRepository houseRepository;
     private final ModelMapper modelMapper;
     private final SearchBuilderConverter searchBuilderConverter;
+    private final HouseMemberRepository houseMemberRepository;
+    private final UserRepository userRepository;
+    private final CurrentUserProvider currentUserProvider;
+
+    @Override
+    @Transactional
+    public String addPeople(HousePeopleRequest request) {
+        Long ownerId = currentUserProvider.getCurrentUserId();
+        House house = findOwnerHouse(ownerId);
+        User target = findTarget(request);
+        if (houseMemberRepository.existsByHouseIdAndUserId(house.getId(), target.getId())) {
+            throw new ConflictException("User already belongs to this house");
+        }
+        HouseMember member = new HouseMember();
+        member.setHouse(house);
+        member.setUser(target);
+        houseMemberRepository.saveAndFlush(member);
+        return "Person added successfully";
+    }
+
+    @Override
+    @Transactional
+    public String removePeople(HousePeopleRequest request) {
+        Long ownerId = currentUserProvider.getCurrentUserId();
+        House house = findOwnerHouse(ownerId);
+        User target = findTarget(request);
+        if (ownerId.equals(target.getId())) {
+            throw new ConflictException("You cannot remove yourself from your house");
+        }
+        HouseMember member = houseMemberRepository.findByHouseIdAndUserId(house.getId(), target.getId())
+                .orElseThrow(() -> new DataNotFoundException("User does not belong to this house"));
+        houseMemberRepository.delete(member);
+        return "Person removed successfully";
+    }
+
+    private House findOwnerHouse(Long ownerId) {
+        User owner = userRepository.findById(ownerId)
+                .orElseThrow(() -> new DataNotFoundException("Current user not found"));
+        if (owner.getRole() != UserRole.OWNER) {
+            throw new AccessDeniedException("Only owners can manage house members");
+        }
+        var houses = houseMemberRepository.findByUserId(ownerId).stream()
+                .map(HouseMember::getHouse)
+                .collect(java.util.stream.Collectors.toMap(House::getId, house -> house, (first, second) -> first));
+        if (houses.isEmpty()) {
+            throw new DataNotFoundException("You do not belong to any house");
+        }
+        if (houses.size() != 1) {
+            throw new ConflictException("Multiple houses found; cannot determine which house to manage");
+        }
+        return houses.values().iterator().next();
+    }
+
+    private User findTarget(HousePeopleRequest request) {
+        if (request == null || request.userId() == null || request.userId() <= 0) {
+            throw new IllegalArgumentException("Provide a positive user ID");
+        }
+        return userRepository.findById(request.userId())
+                .orElseThrow(() -> new DataNotFoundException("User not found"));
+    }
 
     @Override
     @Transactional(readOnly = true)

@@ -11,4 +11,5 @@ public interface HouseMemberRepository extends JpaRepository<HouseMember, Long> 
     List<HouseMember> findByUserId(Long userId);
 
     boolean existsByHouseIdAndUserId(Long houseId, Long userId);
+    java.util.Optional<HouseMember> findByHouseIdAndUserId(Long houseId, Long userId);
 }

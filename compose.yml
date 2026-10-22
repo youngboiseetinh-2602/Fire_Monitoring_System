@@ -1,0 +1,65 @@
+services:
+  database:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-fire_monitoring}
+      MYSQL_USER: ${MYSQL_USER:-fire_monitor}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-fire_monitor_password}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_password}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - fire-monitoring
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DB_URL: jdbc:mysql://database:3306/${MYSQL_DATABASE:-fire_monitoring}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Bangkok
+      DB_USERNAME: ${MYSQL_USER:-fire_monitor}
+      DB_PASSWORD: ${MYSQL_PASSWORD:-fire_monitor_password}
+      JPA_DDL_AUTO: ${JPA_DDL_AUTO:-update}
+      FIRE_JWT_SECRET: ${FIRE_JWT_SECRET:-change-this-local-development-secret-32-bytes}
+      FIRE_JWT_ISSUER: ${FIRE_JWT_ISSUER:-fire-monitoring-system}
+      FIRE_JWT_EXPIRATION_MINUTES: ${FIRE_JWT_EXPIRATION_MINUTES:-60}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+      MQTT_ENABLED: ${MQTT_ENABLED:-false}
+      MQTT_BROKER_URL: ${MQTT_BROKER_URL:-tcp://host.docker.internal:1883}
+      MQTT_CLIENT_ID: ${MQTT_CLIENT_ID:-fire-monitoring-docker}
+      MQTT_USERNAME: ${MQTT_USERNAME:-}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-}
+    depends_on:
+      database:
+        condition: service_healthy
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    networks:
+      - fire-monitoring
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    networks:
+      - fire-monitoring
+
+volumes:
+  mysql_data:
+
+networks:
+  fire-monitoring:
+    driver: bridge

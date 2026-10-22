@@ -73,7 +73,8 @@ public class SecurityConfig {
                 .authenticationProvider(authenticationProvider)
                 .authorizeHttpRequests(authorize -> {
                     if (securityEnabled) {
-                        authorize.requestMatchers("/public/**", "/error", "/actuator/health").permitAll()
+                        // WebSocket authenticates JWT in the STOMP CONNECT frame.
+                        authorize.requestMatchers("/public/**", "/error", "/actuator/health", "/ws").permitAll()
                                 .requestMatchers(HttpMethod.GET, "/users").hasRole("ADMIN")
                                 .anyRequest().authenticated();
                     } else {
