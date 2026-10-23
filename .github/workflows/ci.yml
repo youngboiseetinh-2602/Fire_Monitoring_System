@@ -68,6 +68,8 @@ jobs:
             context: .
           - component: frontend
             context: ./frontend
+          - component: prediction
+            context: ./prediction-service
     steps:
       - uses: actions/checkout@v6
       - name: Validate Compose configuration

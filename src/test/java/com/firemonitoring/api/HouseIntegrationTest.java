@@ -13,6 +13,9 @@ import com.firemonitoring.exception.ServiceUnavailableException;
 import com.firemonitoring.websocket.HouseDataPublisher;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import com.firemonitoring.mqtt.MqttDataListener;
+import com.firemonitoring.service.FirePredictionService;
+import com.firemonitoring.model.response.PredictionResult;
+import com.firemonitoring.enums.EventType;
 import org.springframework.integration.mqtt.support.MqttHeaders;
 import org.springframework.messaging.support.MessageBuilder;
 import com.firemonitoring.converter.SearchBuilderConverter;
@@ -171,7 +174,9 @@ class HouseIntegrationTest {
         houseDataPublisher = new HouseDataPublisher(messagingTemplate);
         members = mock(HouseMemberRepository.class);
         CurrentUserProvider currentUser = () -> 7L;
-        kitService = new KitServiceImpl(repository, locationRepository, kitRepository, houseDataPublisher, commandPublisher, new ModelMapperConfig().modelMapper(), members, currentUser);
+        FirePredictionService predictionService = data -> new PredictionResult(EventType.NORMAL, 0, 0.95);
+        kitService = new KitServiceImpl(repository, locationRepository, kitRepository, houseDataPublisher,
+                commandPublisher, new ModelMapperConfig().modelMapper(), members, currentUser, predictionService);
         mvc = MockMvcBuilders.standaloneSetup(new HouseController(
                         new HouseServiceImpl(repository, new ModelMapper(), new SearchBuilderConverter(),
                                 members, mock(com.firemonitoring.repository.UserRepository.class), currentUser)),

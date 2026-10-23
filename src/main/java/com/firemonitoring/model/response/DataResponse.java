@@ -13,4 +13,5 @@ public class DataResponse {
     private boolean flame;
     private String location;
     private EventType status;
+    private double confidence;
 }

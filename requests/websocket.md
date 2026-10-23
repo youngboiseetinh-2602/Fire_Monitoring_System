@@ -58,6 +58,15 @@ The kit then publishes readings continuously to:
 {"temperature":35.5,"humidity":70.2,"gas":620,"flame":false}
 ```
 
+After validation, the backend sends the four sensor values to the prediction
+service. The trained model maps classes `0..4` to `NORMAL`, `UNNORMAL`, `DANGER`,
+`FIRE`, and `EXTREME_FIRE`. Subscribers receive the original reading plus the
+predicted label and probability:
+
+```json
+{"temperature":35.5,"humidity":70.2,"gas":620,"flame":false,"location":"Kitchen","status":"DANGER","confidence":0.87}
+```
+
 The BE cannot make firmware that does not support this command start sending.
 Stopping transmission on the last viewer's departure is not implemented in this step.
 Local fire detection and alarm reporting must remain active without viewers.

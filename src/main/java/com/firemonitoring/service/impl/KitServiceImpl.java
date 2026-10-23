@@ -7,7 +7,6 @@ import com.firemonitoring.model.request.AddKitRequest;
 import com.firemonitoring.model.response.AddKitResponse;
 import com.firemonitoring.repository.HouseMemberRepository;
 import com.firemonitoring.security.CurrentUserProvider;
-import com.firemonitoring.enums.EventType;
 import com.firemonitoring.exception.DataNotFoundException;
 import com.firemonitoring.model.response.DataResponse;
 import com.firemonitoring.repository.HouseRepository;
@@ -16,6 +15,7 @@ import com.firemonitoring.repository.LocationRepository;
 import com.firemonitoring.mqtt.MqttCommandPublisher;
 import org.modelmapper.ModelMapper;
 import com.firemonitoring.service.KitService;
+import com.firemonitoring.service.FirePredictionService;
 import com.firemonitoring.websocket.HouseDataPublisher;
 import com.firemonitoring.model.request.DataRequest;
 import com.firemonitoring.model.request.kitCommand;
@@ -40,6 +40,7 @@ public class KitServiceImpl implements KitService {
     private final ModelMapper modelMapper;
     private final HouseMemberRepository houseMemberRepository;
     private final CurrentUserProvider currentUserProvider;
+    private final FirePredictionService firePredictionService;
 
     @Override
     @Transactional
@@ -149,10 +150,11 @@ public class KitServiceImpl implements KitService {
     }
 
     private DataResponse toResponse(Location location, DataRequest data) {
+        var prediction = firePredictionService.predict(data);
         DataResponse response = modelMapper.map(data, DataResponse.class);
         response.setLocation(location.getLocationName());
-        // Placeholder status until detection rules are implemented.
-        response.setStatus(EventType.NORMAL);
+        response.setStatus(prediction.label());
+        response.setConfidence(prediction.confidence());
         return response;
     }
 }

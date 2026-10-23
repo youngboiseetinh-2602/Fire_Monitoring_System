@@ -54,6 +54,20 @@ services:
     networks:
       - fire-monitoring
 
+  prediction:
+    build:
+      context: ./prediction-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - fire-monitoring
+
   backend:
     build:
       context: .
@@ -73,10 +87,13 @@ services:
       MQTT_CLIENT_ID: ${MQTT_CLIENT_ID:-fire-monitoring-docker}
       MQTT_USERNAME: ${MQTT_USERNAME:-}
       MQTT_PASSWORD: ${MQTT_PASSWORD:-}
+      PREDICTION_BASE_URL: http://prediction:8000
     depends_on:
       database:
         condition: service_healthy
       mosquitto:
+        condition: service_healthy
+      prediction:
         condition: service_healthy
     ports:
       - "${BACKEND_PORT:-8080}:8080"
