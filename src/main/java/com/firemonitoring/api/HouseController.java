@@ -3,6 +3,7 @@ package com.firemonitoring.api;
 import com.firemonitoring.model.request.houseRequest;
 import com.firemonitoring.model.request.houseUpdateRequest;
 import com.firemonitoring.model.response.houseResponse;
+import com.firemonitoring.model.response.HouseMemberResponse;
 import com.firemonitoring.service.HouseService;
 import com.firemonitoring.model.request.HousePeopleRequest;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import java.util.Map;
+import java.util.List;
 
 @RestController
 @RequestMapping("/houses")
@@ -35,6 +37,11 @@ public class HouseController {
     @DeleteMapping("/me/people")
     public ResponseEntity<String> removePeople(@RequestBody @Valid HousePeopleRequest request) {
         return ResponseEntity.ok(houseService.removePeople(request));
+    }
+
+    @GetMapping("/me/people")
+    public ResponseEntity<List<HouseMemberResponse>> getPeople() {
+        return ResponseEntity.ok(houseService.getPeople());
     }
 
     @GetMapping

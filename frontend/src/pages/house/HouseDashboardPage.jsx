@@ -197,7 +197,7 @@ export default function HouseDashboardPage() {
         ]} /> },
       ]} />
     </Card>
-    <HouseMembers houseId={houseId} />
+    <HouseMembers />
     <Modal title="Thêm kit cho nhà" open={kitModal} onCancel={() => setKitModal(false)} onOk={() => form.submit()} okText="Thêm kit">
       <Form form={form} layout="vertical" onFinish={addKit}>
         <Form.Item name="location" label="Vị trí lắp đặt" rules={[{ required: true, whitespace: true, message: 'Nhập vị trí lắp đặt' }, { max: 100 }]}><Input placeholder="Ví dụ: Phòng khách" /></Form.Item>

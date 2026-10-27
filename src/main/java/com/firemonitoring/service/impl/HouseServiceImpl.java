@@ -14,11 +14,14 @@ import com.firemonitoring.builder.HouseSearchBuilder;
 import com.firemonitoring.converter.SearchBuilderConverter;
 import com.firemonitoring.repository.specification.HouseSpecification;
 import java.util.Map;
+import java.util.Comparator;
+import java.util.List;
 import com.firemonitoring.enums.HouseStatus;
 import com.firemonitoring.model.request.houseRequest;
 import com.firemonitoring.model.request.houseUpdateRequest;
 import com.firemonitoring.exception.DataNotFoundException;
 import com.firemonitoring.model.response.houseResponse;
+import com.firemonitoring.model.response.HouseMemberResponse;
 import com.firemonitoring.repository.HouseRepository;
 import com.firemonitoring.service.HouseService;
 import lombok.RequiredArgsConstructor;
@@ -70,6 +73,21 @@ public class HouseServiceImpl implements HouseService {
                 .orElseThrow(() -> new DataNotFoundException("User does not belong to this house"));
         houseMemberRepository.delete(member);
         return "Person removed successfully";
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<HouseMemberResponse> getPeople() {
+        Long ownerId = currentUserProvider.getCurrentUserId();
+        House house = findOwnerHouse(ownerId);
+        return houseMemberRepository.findByHouseId(house.getId()).stream()
+                .map(member -> {
+                    User user = member.getUser();
+                    return new HouseMemberResponse(user.getId(), user.getUsername(),
+                            user.getFullName(), user.getRole());
+                })
+                .sorted(Comparator.comparing(HouseMemberResponse::id))
+                .toList();
     }
 
     private House findOwnerHouse(Long ownerId) {
