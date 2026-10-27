@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Avatar, Button, Card, Empty, Flex, Table, Typography } from 'antd';
-import { EditOutlined, HomeOutlined, PlusOutlined } from '@ant-design/icons';
+import { EditOutlined, HomeOutlined, PlusOutlined, DashboardOutlined } from '@ant-design/icons';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { houseApi } from '../../api/houseApi';
 import { cleanFilters } from '../../api/query';
@@ -41,6 +41,7 @@ export default function HouseListPage() {
   function search(values) {
     setParams({ ...cleanFilters(values, ['city', 'ward', 'detail']), page: '0' });
   }
+
   const columns = [
     { title: 'ID', dataIndex: 'id', width: 70, render: id => `#${id}` },
     { title: 'Ngôi nhà', key: 'house', render: (_, house) => <div className="table-person">
@@ -50,10 +51,17 @@ export default function HouseListPage() {
     { title: 'Thành phố / Tỉnh', dataIndex: 'city' },
     { title: 'Phường / Xã', dataIndex: 'ward' },
     { title: 'Trạng thái', dataIndex: 'status', render: value => <StatusTag value={value} /> },
-    { title: 'Thao tác', key: 'actions', render: (_, house) => <Link to={`/app/houses/${house.id}/edit`}
-      state={{ house, returnTo: location.pathname + location.search }}>
-      <Button icon={<EditOutlined />} aria-label={`Sửa ${house.houseName}`}>Sửa</Button>
-    </Link> },
+    { title: 'Thao tác', key: 'actions', render: (_, house) => (
+      <Flex gap="small">
+        {/* Nút Giám sát mới được thêm vào */}
+        <Link to={`/app/houses/${house.id}/dashboard`} state={{ houseName: house.houseName }}>
+          <Button type="primary" icon={<DashboardOutlined />}>Giám sát</Button>
+        </Link>
+        <Link to={`/app/houses/${house.id}/edit`} state={{ house, returnTo: location.pathname + location.search }}>
+          <Button icon={<EditOutlined />} aria-label={`Sửa ${house.houseName}`}>Sửa</Button>
+        </Link>
+      </Flex>
+    ) },
   ];
 
   return <>

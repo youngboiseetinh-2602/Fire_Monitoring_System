@@ -12,6 +12,7 @@ import EditProfilePage from '../pages/user/EditProfilePage';
 import HouseListPage from '../pages/house/HouseListPage';
 import CreateHousePage from '../pages/house/CreateHousePage';
 import EditHousePage from '../pages/house/EditHousePage';
+import HouseDashboardPage from '../pages/house/HouseDashboardPage';
 
 function RequireAuth({ admin = false }) {
   const { user } = useAuth();
@@ -41,6 +42,8 @@ export default function AppRoutes() {
         <Route path="houses" element={<HouseListPage />} />
         <Route path="houses/new" element={<CreateHousePage />} />
         <Route path="houses/:houseId/edit" element={<EditHousePage />} />
+        {/* Đã thêm route cho Dashboard ở đây */}
+        <Route path="houses/:houseId/dashboard" element={<HouseDashboardPage />} />
         <Route path="profile" element={<UserDetailPage own />} />
         <Route path="profile/edit" element={<EditProfilePage />} />
         <Route element={<RequireAuth admin />}>

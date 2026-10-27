@@ -1,0 +1,37 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    {
+      "source": "/public/:path*",
+      "destination": "https://fire-monitoring-system.onrender.com/public/:path*"
+    },
+    {
+      "source": "/users/:path*",
+      "destination": "https://fire-monitoring-system.onrender.com/users/:path*"
+    },
+    {
+      "source": "/houses/:path*",
+      "destination": "https://fire-monitoring-system.onrender.com/houses/:path*"
+    },
+    {
+      "source": "/house/:path*",
+      "destination": "https://fire-monitoring-system.onrender.com/house/:path*"
+    },
+    {
+      "source": "/me/:path*",
+      "destination": "https://fire-monitoring-system.onrender.com/me/:path*"
+    },
+    {
+      "source": "/kits/:path*",
+      "destination": "https://fire-monitoring-system.onrender.com/kits/:path*"
+    },
+    {
+      "source": "/ws",
+      "destination": "https://fire-monitoring-system.onrender.com/ws"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

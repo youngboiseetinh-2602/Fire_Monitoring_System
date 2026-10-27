@@ -18,7 +18,7 @@ export function AuthProvider({ children }) {
     const token = await authApi.login(values);
     const profile = await userApi.getMe({ headers: { Authorization: `Bearer ${token}` }, auth: false });
     setAccessToken(token);
-    setUser(profile);
+    setUser({ ...profile, accessToken: token });
     setExpired(false);
   }
 
@@ -28,7 +28,7 @@ export function AuthProvider({ children }) {
     setExpired(false);
   }
 
-  return <AuthContext.Provider value={{ user, login, logout, expired, updateUser: profile => setUser(current => current ? profile : null) }}>
+  return <AuthContext.Provider value={{ user, login, logout, expired, updateUser: profile => setUser(current => current ? { ...profile, accessToken: current.accessToken } : null) }}>
     {children}
   </AuthContext.Provider>;
 }
