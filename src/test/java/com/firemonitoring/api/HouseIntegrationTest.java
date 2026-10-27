@@ -24,6 +24,9 @@ import com.firemonitoring.exception.GlobalException;
 import com.firemonitoring.repository.HouseRepository;
 import com.firemonitoring.repository.HouseMemberRepository;
 import com.firemonitoring.entity.HouseMember;
+import com.firemonitoring.entity.User;
+import com.firemonitoring.enums.UserRole;
+import com.firemonitoring.repository.UserRepository;
 import java.util.List;
 import com.firemonitoring.security.CurrentUserProvider;
 import com.firemonitoring.service.impl.HouseServiceImpl;
@@ -62,11 +65,25 @@ class HouseIntegrationTest {
     void commandApiResolvesDatabaseIdToDeviceUid() throws Exception {
         House house = saveDataHouse("Command house");
         Kit kit = saveDataKit(saveDataLocation(house, "Room"), "ESP32-ABC");
+        when(members.existsByHouseIdAndUserId(house.getId(), 7L)).thenReturn(true);
         mvc.perform(put("/kits/{kitId}/command", kit.getId())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"buzz\":true,\"pump\":false,\"led\":true}"))
                 .andExpect(status().isAccepted());
         verify(commandPublisher).sendCommand(eq("ESP32-ABC"), any());
+    }
+
+    @Test
+    void rejectsCommandFromUserOutsideKitsHouse() throws Exception {
+        House house = saveDataHouse("Private command house");
+        Kit kit = saveDataKit(saveDataLocation(house, "Room"), "ESP32-PRIVATE");
+
+        mvc.perform(put("/kits/{kitId}/command", kit.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"buzz\":true,\"pump\":false,\"led\":true}"))
+                .andExpect(status().isForbidden());
+
+        verify(commandPublisher, never()).sendCommand(anyString(), any());
     }
 
     @Test
@@ -99,9 +116,7 @@ class HouseIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"location\":\" Kitchen \",\"deviceUid\":\" KIT-001 \"}"))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("deviceUid").value("KIT-001"))
-                .andExpect(jsonPath("location").value("Kitchen"))
-                .andExpect(jsonPath("status").value("OFFLINE"));
+                .andExpect(content().string("Thêm kit thành công"));
         Kit saved = kitRepository.findByDeviceUid("KIT-001").orElseThrow();
         assertEquals(house.getId(), saved.getLocation().getHouse().getId());
         assertEquals("Kitchen", saved.getLocation().getLocationName());
@@ -144,15 +159,16 @@ class HouseIntegrationTest {
     }
 
     @Test
-    void rejectsNonAdminAddingKit() throws Exception {
+    void allowsNonAdminAddingKit() throws Exception {
         org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
                 new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
                         "member", "unused", List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_MEMBER"))));
-        long before = locationRepository.count();
-        mvc.perform(post("/houses/1/kits").contentType(MediaType.APPLICATION_JSON)
+        House house = saveDataHouse("Member kit house");
+        mvc.perform(post("/houses/{houseId}/kits", house.getId()).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"location\":\"Room\",\"deviceUid\":\"kit\"}"))
-                .andExpect(status().isForbidden());
-        assertEquals(before, locationRepository.count());
+                .andExpect(status().isCreated())
+                .andExpect(content().string("Thêm kit thành công"));
+        assertTrue(kitRepository.findByDeviceUid("kit").isPresent());
     }
     @Autowired
     private HouseRepository repository;
@@ -166,6 +182,8 @@ class HouseIntegrationTest {
     private KitServiceImpl kitService;
     private MockMvc mvc;
     private HouseMemberRepository members;
+    private UserRepository users;
+    private User currentUser;
 
     @BeforeEach
     void setup() {
@@ -173,13 +191,18 @@ class HouseIntegrationTest {
         messagingTemplate = mock(SimpMessagingTemplate.class);
         houseDataPublisher = new HouseDataPublisher(messagingTemplate);
         members = mock(HouseMemberRepository.class);
+        users = mock(UserRepository.class);
+        currentUser = new User();
+        currentUser.setId(7L);
+        currentUser.setRole(UserRole.MEMBER);
+        when(users.findById(7L)).thenReturn(java.util.Optional.of(currentUser));
         CurrentUserProvider currentUser = () -> 7L;
         FirePredictionService predictionService = data -> new PredictionResult(EventType.NORMAL, 0, 0.95);
         kitService = new KitServiceImpl(repository, locationRepository, kitRepository, houseDataPublisher,
                 commandPublisher, new ModelMapperConfig().modelMapper(), members, currentUser, predictionService);
         mvc = MockMvcBuilders.standaloneSetup(new HouseController(
                         new HouseServiceImpl(repository, new ModelMapper(), new SearchBuilderConverter(),
-                                members, mock(com.firemonitoring.repository.UserRepository.class), currentUser)),
+                                members, users, currentUser)),
                         new KitController(kitService))
                 .setControllerAdvice(new GlobalException()).build();
     }
@@ -191,7 +214,10 @@ class HouseIntegrationTest {
         sendReading(kit.getDeviceUid(), 432);
         verify(messagingTemplate).convertAndSend(eq("/topic/houses/" + house.getId() + "/data"),
                 org.mockito.ArgumentMatchers.<Object>argThat(value -> value instanceof com.firemonitoring.model.response.DataResponse data
-                        && data.getGas() == 432 && data.getTemperature() == 35.5f && data.getHumidity() == 70.2f && data.isFlame() && data.getStatus() == com.firemonitoring.enums.EventType.NORMAL && data.getLocation().equals("Kitchen")));
+                        && data.getKitId().equals(kit.getId()) && data.getDeviceUid().equals("stream-device")
+                        && data.getGas() == 432 && data.getTemperature() == 35.5f && data.getHumidity() == 70.2f
+                        && data.isFlame() && data.getStatus() == com.firemonitoring.enums.EventType.NORMAL
+                        && data.getLocation().equals("Kitchen")));
         verifyNoMoreInteractions(messagingTemplate);
     }
 
@@ -206,10 +232,10 @@ class HouseIntegrationTest {
                 "admin", null, List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_ADMIN"))));
         org.springframework.security.core.context.SecurityContextHolder.setContext(context);
         try {
-            mvc.perform(post("/house/{houseId}/kit", house.getId()))
+            mvc.perform(post("/houses/{houseId}/telemetry/start", house.getId()))
                     .andExpect(status().isAccepted())
                     .andExpect(content().json("[" + kit.getId() + "]"));
-            mvc.perform(post("/house/999999/kit")).andExpect(status().isNotFound());
+            mvc.perform(post("/houses/999999/telemetry/start")).andExpect(status().isNotFound());
             verify(commandPublisher).startTelemetry(kit.getDeviceUid());
             verifyNoMoreInteractions(commandPublisher);
             verifyNoInteractions(members);
@@ -228,7 +254,7 @@ class HouseIntegrationTest {
         }
         org.springframework.security.core.context.SecurityContextHolder.setContext(context);
         try {
-            mvc.perform(post("/house/1/kit")).andExpect(status().isForbidden());
+            mvc.perform(post("/houses/1/telemetry/start")).andExpect(status().isForbidden());
             verifyNoInteractions(commandPublisher, members);
         } finally {
             org.springframework.security.core.context.SecurityContextHolder.clearContext();
@@ -256,7 +282,7 @@ class HouseIntegrationTest {
         saveDataKit(saveDataLocation(other, "Other room"), "other-kit");
 
         belongsTo(house);
-        mvc.perform(post("/me/house/kit").param("houseId", other.getId().toString()).param("userId", "99"))
+        mvc.perform(post("/me/houses/telemetry/start").param("houseId", other.getId().toString()).param("userId", "99"))
                 .andExpect(status().isAccepted())
                 .andExpect(jsonPath("$", org.hamcrest.Matchers.containsInAnyOrder(
                         kitchen.getId().intValue(), bedroom.getId().intValue())));
@@ -270,11 +296,11 @@ class HouseIntegrationTest {
     void returnsNoKitIdsForEmptyHouseAndNotFoundForMissingHouse() throws Exception {
         House house = saveDataHouse("Empty house");
         belongsTo(house);
-        mvc.perform(post("/me/house/kit"))
+        mvc.perform(post("/me/houses/telemetry/start"))
                 .andExpect(status().isAccepted()).andExpect(content().json("[]"));
         mvc.perform(post("/me/house")).andExpect(status().isNotFound());
         mvc.perform(post("/houses/{houseId}/data", house.getId())).andExpect(status().isNotFound());
-        mvc.perform(get("/me/house/kit")).andExpect(status().isMethodNotAllowed());
+        mvc.perform(get("/me/houses/telemetry/start")).andExpect(status().isMethodNotAllowed());
         verifyNoInteractions(commandPublisher);
     }
 
@@ -285,7 +311,7 @@ class HouseIntegrationTest {
         doThrow(new ServiceUnavailableException("MQTT unavailable"))
                 .when(commandPublisher).startTelemetry(kit.getDeviceUid());
         belongsTo(house);
-        mvc.perform(post("/me/house/kit"))
+        mvc.perform(post("/me/houses/telemetry/start"))
                 .andExpect(status().isServiceUnavailable());
     }
 
@@ -293,7 +319,7 @@ class HouseIntegrationTest {
     void rejectsNonMemberBeforeSendingCommandsEvenWithSpoofedUserId() throws Exception {
         House house = saveDataHouse("Private house");
         saveDataKit(saveDataLocation(house, "Kitchen"), "private-kit");
-        mvc.perform(post("/me/house/kit").param("houseId", house.getId().toString()).param("userId", "99"))
+        mvc.perform(post("/me/houses/telemetry/start").param("houseId", house.getId().toString()).param("userId", "99"))
                 .andExpect(status().isNotFound());
         verify(members).findByUserId(7L);
         verifyNoInteractions(commandPublisher);
@@ -315,7 +341,7 @@ class HouseIntegrationTest {
         Kit firstKit = saveDataKit(saveDataLocation(first, "Kitchen"), "first-kit");
         Kit secondKit = saveDataKit(saveDataLocation(second, "Kitchen"), "second-kit");
         belongsTo(first, second, first);
-        mvc.perform(post("/me/house/kit"))
+        mvc.perform(post("/me/houses/telemetry/start"))
                 .andExpect(status().isAccepted())
                 .andExpect(jsonPath("$", org.hamcrest.Matchers.containsInAnyOrder(
                         firstKit.getId().intValue(), secondKit.getId().intValue())));
@@ -355,19 +381,19 @@ class HouseIntegrationTest {
 
     @Test
     void createPersistsHouseWithNormalStatusAndListsIt() throws Exception {
-        String response = mvc.perform(post("/houses/createHouse").contentType(MediaType.APPLICATION_JSON)
+        mvc.perform(post("/houses/createHouse").contentType(MediaType.APPLICATION_JSON)
                         .content(body().put("status", "FIRE").put("id", 99999).toString()))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.houseName").value("Nha A"))
-                .andExpect(jsonPath("$.city").value("Ha Noi"))
-                .andExpect(jsonPath("$.ward").value("Ba Dinh"))
-                .andExpect(jsonPath("$.addressDetail").value("12 Nguyen Thai Hoc"))
-                .andExpect(jsonPath("$.status").value("NORMAL"))
-                .andReturn().getResponse().getContentAsString();
-        long id = new ObjectMapper().readTree(response).get("id").asLong();
-        assertNotEquals(99999, id);
+                .andExpect(content().string("Tạo nhà thành công"));
         repository.flush();
-        assertEquals(HouseStatus.NORMAL, repository.findById(id).orElseThrow().getStatus());
+        House savedHouse = repository.findAll().stream().findFirst().orElseThrow();
+        long id = savedHouse.getId();
+        assertNotEquals(99999, id);
+        assertEquals(HouseStatus.NORMAL, savedHouse.getStatus());
+        assertEquals(UserRole.OWNER, currentUser.getRole());
+        verify(users).save(currentUser);
+        verify(members).save(argThat(member -> member.getHouse().getId().equals(id)
+                && member.getUser() == currentUser));
         mvc.perform(get("/houses"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(1))

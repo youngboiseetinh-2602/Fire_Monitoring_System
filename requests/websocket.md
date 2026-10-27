@@ -8,17 +8,17 @@ and forwarded immediately to the house WebSocket topic.
 1. Connect STOMP over WebSocket to `ws://localhost:8080/ws` (`wss://` with HTTPS).
 2. Supply `Authorization: Bearer <JWT>` in the STOMP CONNECT headers when security is enabled.
 3. Subscribe to `/topic/houses/{houseId}/data` before requesting telemetry.
-4. Call `POST /me/house/kit` with the same Bearer token in the HTTP header. No IDs or body are required.
+4. Call `POST /me/houses/telemetry/start` with the same Bearer token in the HTTP header. No IDs or body are required.
 5. Update the matching location row for each incoming JSON `DataResponse`.
 
-The POST is handled by `KitController`. `KitService.getMyHouseKits()` gets the user ID
+The POST is handled by `KitController`. `KitService.startMyHouseTelemetry()` gets the user ID
 from the security context and finds their houses through `house_members` (for both
 MEMBER and OWNER users). For each distinct house it calls private `getData(houseId)`:
 House -> Locations -> Kits ->
 MQTT START commands. HTTP 202 returns requested kit IDs, e.g. `[1, 2]`, not readings.
-The `/me/house/kit` endpoint finds houses through `house_members`.
-Admins can instead call `POST /house/{houseId}/kit` with a Bearer token to start
-telemetry for one selected house without membership. `getHouseKit(houseId)` checks
+The `/me/houses/telemetry/start` endpoint finds houses through `house_members`.
+Admins can instead call `POST /houses/{houseId}/telemetry/start` with a Bearer token to start
+telemetry for one selected house without membership. `startHouseTelemetry(houseId)` checks
 `ROLE_ADMIN` in the security context before calling `getData(houseId)`. Non-admins
 receive 403; a missing house returns 404. Admins can also subscribe to any existing
 house topic; other users must be members.
@@ -91,7 +91,7 @@ client.onConnect = async () => {
     console.log(data); // Update row matching data.location.
   });
   try {
-    const response = await fetch('http://localhost:8080/me/house/kit', {
+    const response = await fetch('http://localhost:8080/me/houses/telemetry/start', {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -112,7 +112,7 @@ are separate requests; early readings can be missed while subscription is regist
 Subsequent continuous readings update the screen.
 Only configured CORS origins may connect. With security enabled, WebSocket subscriptions
 require membership or the ADMIN role. The local `APP_SECURITY_ENABLED=false` setting
-bypasses WebSocket authentication; use `true` for membership enforcement. HTTP `/me/house/kit`
+bypasses WebSocket authentication; use `true` for membership enforcement. HTTP `/me/houses/telemetry/start`
 always requires a JWT identity and membership.
 Browser SEND frames are rejected. WebSocket subscriptions are local to one BE instance.
 Status remains the requested fixed `NORMAL`; fire detection and event persistence

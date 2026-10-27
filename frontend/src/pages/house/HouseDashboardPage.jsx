@@ -5,9 +5,8 @@ import { AlertOutlined, BulbOutlined, CloudOutlined, DashboardOutlined, FireOutl
 import { kitApi } from '../../api/kitApi';
 import { useAuth } from '../../auth/AuthContext';
 import PageHeader from '../../components/common/PageHeader';
-import HouseMembers from './HouseMembers';
 
-const initial = { temperature: null, humidity: null, gas: null, flame: false, status: 'NORMAL', confidence: null, location: '' };
+const initial = { kitId: null, deviceUid: '', temperature: null, humidity: null, gas: null, flame: false, status: 'NORMAL', confidence: null, location: '' };
 const wsBase = import.meta.env.VITE_API_BASE_URL || window.location.origin;
 const historyLimit = 100;
 
@@ -102,7 +101,7 @@ export default function HouseDashboardPage() {
     setKitError(null);
     (async () => {
       try {
-        const ids = admin ? await kitApi.getHouseKits(houseId) : await kitApi.getMyHouseKits();
+        const ids = admin ? await kitApi.startHouseTelemetry(houseId) : await kitApi.startMyHouseTelemetry();
         if (active) {
           const validIds = Array.isArray(ids) ? ids : [];
           setKitIds(validIds);
@@ -125,7 +124,7 @@ export default function HouseDashboardPage() {
       setSensor(reading);
       setReadings(current => [reading, ...current].slice(0, historyLimit));
       if (isFire) {
-        setAlerts(current => [{ ...reading, id: `${reading.receivedAt}-${reading.location}` }, ...current].slice(0, historyLimit));
+        setAlerts(current => [{ ...reading, id: `${reading.receivedAt}-${reading.kitId || reading.location}` }, ...current].slice(0, historyLimit));
         if (!previousFire.current) message.error(`Cảnh báo cháy tại ${reading.location || houseName}.`);
       }
       previousFire.current = isFire;
@@ -138,19 +137,17 @@ export default function HouseDashboardPage() {
 
   async function addKit(values) {
     try {
-      const kit = await kitApi.addToHouse(houseId, values);
-      setKitIds(current => [...current, kit.id]);
-      setSelectedKitId(kit.id);
+      await kitApi.addToHouse(houseId, values);
       setKitModal(false); form.resetFields();
-      message.success(`Đã thêm kit ${kit.deviceUid}.`);
-      // Opening the admin kit endpoint starts its telemetry stream.
-      const ids = await kitApi.getHouseKits(houseId); setKitIds(ids || []);
+      message.success('Đã thêm kit thành công.');
+      const ids = admin ? await kitApi.startHouseTelemetry(houseId) : await kitApi.startMyHouseTelemetry();
+      setKitIds(ids || []);
     } catch (error) { message.error(error.message || 'Không thêm được kit.'); }
   }
 
   async function command(field, enabled) {
     const kitId = selectedKitId;
-    if (!admin || !kitId) return;
+    if (admin || !kitId) return;
     setCommandBusy(field);
     const states = { ...deviceState, [field]: enabled };
     try { await kitApi.sendCommand(kitId, states); setDeviceState(states); message.success('Đã gửi lệnh đến kit.'); }
@@ -171,8 +168,8 @@ export default function HouseDashboardPage() {
       <Col xs={12} lg={6}><Card><Statistic title="Nồng độ gas" value={sensor.gas ?? '—'} suffix={sensor.gas == null ? '' : 'ppm'} prefix={<AlertOutlined />} /></Card></Col>
       <Col xs={12} lg={6}><Card><Statistic title="Trạng thái" value={hasTelemetry ? statusLabel : 'Chưa có dữ liệu'} valueStyle={{ color: hasTelemetry ? statusColor : undefined, fontSize: 20 }} prefix={<FireOutlined />} /></Card></Col>
     </Row>
-    <Card title="Điều khiển thiết bị" style={{ marginTop: 24 }} extra={<Space>{sensor.location && <Tag>{sensor.location}</Tag>}{admin && kitIds.length > 1 && <Select aria-label="Chọn kit điều khiển" value={selectedKitId} onChange={setSelectedKitId} options={kitIds.map(id => ({ value: id, label: `Kit #${id}` }))} style={{ minWidth: 140 }} />}</Space>}>
-      {!kitIds.length ? <Typography.Text type="secondary">Chưa có thiết bị để điều khiển.</Typography.Text> : !admin ? <Alert type="info" showIcon message="Chỉ ADMIN có thể gửi lệnh điều khiển từ màn hình này." description="API hiện tại chỉ trả mã kit theo tài khoản, chưa gắn từng kit với nhà đang xem để gửi lệnh an toàn." /> : <Row gutter={[16, 16]}>
+    <Card title="Điều khiển thiết bị" style={{ marginTop: 24 }} extra={<Space>{sensor.location && <Tag>{sensor.location}</Tag>}{!admin && kitIds.length > 1 && <Select aria-label="Chọn kit điều khiển" value={selectedKitId} onChange={setSelectedKitId} options={kitIds.map(id => ({ value: id, label: `Kit #${id}` }))} style={{ minWidth: 140 }} />}</Space>}>
+      {!kitIds.length ? <Typography.Text type="secondary">Chưa có thiết bị để điều khiển.</Typography.Text> : admin ? <Alert type="info" showIcon message="ADMIN chỉ giám sát hệ thống." description="Chỉ OWNER hoặc MEMBER thuộc ngôi nhà mới có thể điều khiển thiết bị." /> : <Row gutter={[16, 16]}>
         {[["pump", "Máy bơm", <ThunderboltOutlined />], ["buzz", "Còi báo động", <AlertOutlined />], ["led", "Đèn cảnh báo", <BulbOutlined />]].map(([key, label, icon]) => <Col xs={24} md={8} key={key}><Card size="small" title={<Space>{icon}{label}</Space>}><Flex justify="space-between" align="center"><span>{deviceState[key] ? 'Đang bật' : 'Đang tắt'}</span><Switch checked={deviceState[key]} loading={commandBusy === key} disabled={!!commandBusy} onChange={value => command(key, value)} /></Flex></Card></Col>)}
       </Row>}
     </Card>
@@ -197,7 +194,6 @@ export default function HouseDashboardPage() {
         ]} /> },
       ]} />
     </Card>
-    <HouseMembers />
     <Modal title="Thêm kit cho nhà" open={kitModal} onCancel={() => setKitModal(false)} onOk={() => form.submit()} okText="Thêm kit">
       <Form form={form} layout="vertical" onFinish={addKit}>
         <Form.Item name="location" label="Vị trí lắp đặt" rules={[{ required: true, whitespace: true, message: 'Nhập vị trí lắp đặt' }, { max: 100 }]}><Input placeholder="Ví dụ: Phòng khách" /></Form.Item>

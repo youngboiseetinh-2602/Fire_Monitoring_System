@@ -13,13 +13,16 @@ import HouseListPage from '../pages/house/HouseListPage';
 import CreateHousePage from '../pages/house/CreateHousePage';
 import EditHousePage from '../pages/house/EditHousePage';
 import HouseDashboardPage from '../pages/house/HouseDashboardPage';
+import HouseMembersPage from '../pages/house/HouseMembersPage';
 
-function RequireAuth({ admin = false }) {
+function RequireAuth({ admin = false, owner = false }) {
   const { user } = useAuth();
   const location = useLocation();
   if (!user) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
   if (admin && user.role !== 'ADMIN') return <Result status="403" title="Không có quyền truy cập"
     subTitle="Trang này dành cho quản trị viên." extra={<Link to="/app/houses"><Button>Về nhà ở</Button></Link>} />;
+  if (owner && user.role !== 'OWNER') return <Result status="403" title="Không có quyền truy cập"
+    subTitle="Trang này dành cho chủ nhà." extra={<Link to="/app/houses"><Button>Về nhà ở</Button></Link>} />;
   return <Outlet />;
 }
 
@@ -44,6 +47,9 @@ export default function AppRoutes() {
         <Route path="houses/:houseId/edit" element={<EditHousePage />} />
         {/* Đã thêm route cho Dashboard ở đây */}
         <Route path="houses/:houseId/dashboard" element={<HouseDashboardPage />} />
+        <Route element={<RequireAuth owner />}>
+          <Route path="members" element={<HouseMembersPage />} />
+        </Route>
         <Route path="profile" element={<UserDetailPage own />} />
         <Route path="profile/edit" element={<EditProfilePage />} />
         <Route element={<RequireAuth admin />}>

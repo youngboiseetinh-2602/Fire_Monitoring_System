@@ -7,6 +7,8 @@ import lombok.Setter;
 @Getter
 @Setter
 public class DataResponse {
+    private Long kitId;
+    private String deviceUid;
     private float temperature;
     private float humidity;
     private int gas;

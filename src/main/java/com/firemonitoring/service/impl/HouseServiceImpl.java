@@ -14,14 +14,13 @@ import com.firemonitoring.builder.HouseSearchBuilder;
 import com.firemonitoring.converter.SearchBuilderConverter;
 import com.firemonitoring.repository.specification.HouseSpecification;
 import java.util.Map;
-import java.util.Comparator;
 import java.util.List;
 import com.firemonitoring.enums.HouseStatus;
 import com.firemonitoring.model.request.houseRequest;
 import com.firemonitoring.model.request.houseUpdateRequest;
 import com.firemonitoring.exception.DataNotFoundException;
 import com.firemonitoring.model.response.houseResponse;
-import com.firemonitoring.model.response.HouseMemberResponse;
+import com.firemonitoring.model.response.userResponse;
 import com.firemonitoring.repository.HouseRepository;
 import com.firemonitoring.service.HouseService;
 import lombok.RequiredArgsConstructor;
@@ -77,16 +76,14 @@ public class HouseServiceImpl implements HouseService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<HouseMemberResponse> getPeople() {
-        Long ownerId = currentUserProvider.getCurrentUserId();
-        House house = findOwnerHouse(ownerId);
+    public List<userResponse> getMember() {
+        Long userId = currentUserProvider.getCurrentUserId();
+        House house = houseMemberRepository.findFirstByUserIdOrderByIdAsc(userId)
+                .map(HouseMember::getHouse)
+                .orElseThrow(() -> new DataNotFoundException("You do not belong to any house"));
+
         return houseMemberRepository.findByHouseId(house.getId()).stream()
-                .map(member -> {
-                    User user = member.getUser();
-                    return new HouseMemberResponse(user.getId(), user.getUsername(),
-                            user.getFullName(), user.getRole());
-                })
-                .sorted(Comparator.comparing(HouseMemberResponse::id))
+                .map(member -> modelMapper.map(member.getUser(), userResponse.class))
                 .toList();
     }
 
@@ -145,10 +142,22 @@ public class HouseServiceImpl implements HouseService {
 
     @Override
     @Transactional
-    public houseResponse createHouse(houseRequest request) {
+    public String createHouse(houseRequest request) {
         House house = modelMapper.map(request, House.class);
         house.setStatus(HouseStatus.NORMAL);
-        return modelMapper.map(houseRepository.save(house), houseResponse.class);
+        House savedHouse = houseRepository.save(house);
+
+        User currentUser = userRepository.findById(currentUserProvider.getCurrentUserId())
+                .orElseThrow(() -> new DataNotFoundException("Current user not found"));
+        currentUser.setRole(UserRole.OWNER);
+        userRepository.save(currentUser);
+
+        HouseMember ownerMembership = new HouseMember();
+        ownerMembership.setHouse(savedHouse);
+        ownerMembership.setUser(currentUser);
+        houseMemberRepository.save(ownerMembership);
+
+        return "Tạo nhà thành công";
     }
 
     @Override

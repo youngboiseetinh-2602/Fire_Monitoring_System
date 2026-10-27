@@ -6,6 +6,7 @@ function housePayload({ houseName, city, ward, addressDetail }) {
 }
 
 export const houseApi = {
+  getMembers: (options = {}) => client.get('/houses/me/people', options),
   addPeople: ({ userId }) => client.post('/houses/me/people', { userId }),
   removePeople: ({ userId }) => client.delete('/houses/me/people', { data: { userId } }),
   findAll: (page = 0, signal) => client.get('/houses', { params: { page }, signal }),

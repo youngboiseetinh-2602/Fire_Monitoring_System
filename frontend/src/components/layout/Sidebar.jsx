@@ -8,9 +8,11 @@ export default function Sidebar({ collapsed = false, onNavigate = () => {} }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const selected = pathname.startsWith('/app/users') ? '/app/users'
+    : pathname.startsWith('/app/members') ? '/app/members'
     : pathname.startsWith('/app/profile') ? '/app/profile' : '/app/houses';
   const items = [
     { key: '/app/houses', icon: <HomeOutlined />, label: 'Nhà ở' },
+    ...(user.role === 'OWNER' ? [{ key: '/app/members', icon: <TeamOutlined />, label: 'Thành viên' }] : []),
     ...(user.role === 'ADMIN' ? [{ key: '/app/users', icon: <TeamOutlined />, label: 'Người dùng' }] : []),
     { key: '/app/profile', icon: <UserOutlined />, label: 'Hồ sơ cá nhân' },
   ];

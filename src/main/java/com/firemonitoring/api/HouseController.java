@@ -3,7 +3,7 @@ package com.firemonitoring.api;
 import com.firemonitoring.model.request.houseRequest;
 import com.firemonitoring.model.request.houseUpdateRequest;
 import com.firemonitoring.model.response.houseResponse;
-import com.firemonitoring.model.response.HouseMemberResponse;
+import com.firemonitoring.model.response.userResponse;
 import com.firemonitoring.service.HouseService;
 import com.firemonitoring.model.request.HousePeopleRequest;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -12,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -30,18 +31,21 @@ public class HouseController {
     private final HouseService houseService;
 
     @PostMapping("/me/people")
+    @PreAuthorize("hasRole('OWNER')")
     public ResponseEntity<String> addPeople(@RequestBody @Valid HousePeopleRequest request) {
         return ResponseEntity.ok(houseService.addPeople(request));
     }
 
     @DeleteMapping("/me/people")
+    @PreAuthorize("hasRole('OWNER')")
     public ResponseEntity<String> removePeople(@RequestBody @Valid HousePeopleRequest request) {
         return ResponseEntity.ok(houseService.removePeople(request));
     }
 
     @GetMapping("/me/people")
-    public ResponseEntity<List<HouseMemberResponse>> getPeople() {
-        return ResponseEntity.ok(houseService.getPeople());
+    @PreAuthorize("hasRole('OWNER')")
+    public ResponseEntity<List<userResponse>> getMember() {
+        return ResponseEntity.ok(houseService.getMember());
     }
 
     @GetMapping
@@ -57,8 +61,8 @@ public class HouseController {
         return ResponseEntity.ok(houseService.findHouse(params, page));
     }
 
-    @PostMapping("/createHouse")
-    public ResponseEntity<houseResponse> createHouse(@RequestBody @Valid houseRequest request) {
+    @PostMapping(value = "/createHouse", produces = "text/plain;charset=UTF-8")
+    public ResponseEntity<String> createHouse(@RequestBody @Valid houseRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(houseService.createHouse(request));
     }
 

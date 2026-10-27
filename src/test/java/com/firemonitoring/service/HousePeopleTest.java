@@ -65,6 +65,32 @@ class HousePeopleTest {
         verify(users, never()).delete(any(User.class));
     }
 
+    @Test
+    void getsMembersFromCurrentUsersHouse() {
+        target.setUsername("member");
+        target.setFullName("Member Name");
+        HouseMember targetMembership = new HouseMember();
+        targetMembership.setHouse(house);
+        targetMembership.setUser(target);
+        when(members.findFirstByUserIdOrderByIdAsc(7L)).thenReturn(Optional.of(ownerMembership));
+        when(members.findByHouseId(10L)).thenReturn(List.of(ownerMembership, targetMembership));
+
+        var result = service.getMember();
+
+        assertEquals(2, result.size());
+        assertEquals(7L, result.get(0).getId());
+        assertEquals("member", result.get(1).getUsername());
+        assertEquals("Member Name", result.get(1).getFullName());
+    }
+
+    @Test
+    void getMemberRejectsCurrentUserWithoutHouse() {
+        when(members.findFirstByUserIdOrderByIdAsc(7L)).thenReturn(Optional.empty());
+
+        assertThrows(DataNotFoundException.class, service::getMember);
+        verify(members, never()).findByHouseId(anyLong());
+    }
+
     @ParameterizedTest
     @EnumSource(value = UserRole.class, names = {"MEMBER", "ADMIN"})
     void onlyOwnerCanAddOrRemove(UserRole role) {

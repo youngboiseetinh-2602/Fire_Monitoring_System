@@ -4,7 +4,6 @@ import com.firemonitoring.entity.Location;
 import com.firemonitoring.entity.Kit;
 import com.firemonitoring.exception.ConflictException;
 import com.firemonitoring.model.request.AddKitRequest;
-import com.firemonitoring.model.response.AddKitResponse;
 import com.firemonitoring.repository.HouseMemberRepository;
 import com.firemonitoring.security.CurrentUserProvider;
 import com.firemonitoring.exception.DataNotFoundException;
@@ -44,8 +43,7 @@ public class KitServiceImpl implements KitService {
 
     @Override
     @Transactional
-    public AddKitResponse addKit(long houseId, AddKitRequest request) {
-        requireAdmin();
+    public String addKit(long houseId, AddKitRequest request) {
         if (houseId <= 0 || request == null || request.location() == null
                 || request.deviceUid() == null || request.location().isBlank()
                 || request.deviceUid().isBlank() || request.location().length() > 100
@@ -65,25 +63,14 @@ public class KitServiceImpl implements KitService {
         if (locationRepository.existsByHouseIdAndLocationName(houseId, locationName)) {
             throw new ConflictException("Location already exists in this house");
         }
-        Location location = new Location();
+        AddKitRequest normalizedRequest = new AddKitRequest(locationName, deviceUid);
+        Location location = modelMapper.map(normalizedRequest, Location.class);
         location.setHouse(house);
-        location.setLocationName(locationName);
         location = locationRepository.saveAndFlush(location);
-        Kit kit = new Kit();
-        kit.setDeviceUid(deviceUid);
+        Kit kit = modelMapper.map(normalizedRequest, Kit.class);
         kit.setLocation(location);
-        kit = kitRepository.saveAndFlush(kit);
-        return new AddKitResponse(kit.getId(), kit.getDeviceUid(), houseId,
-                location.getId(), location.getLocationName(), kit.getStatus());
-    }
-
-    private void requireAdmin() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || !authentication.isAuthenticated()
-                || authentication.getAuthorities().stream()
-                .noneMatch(authority -> "ROLE_ADMIN".equals(authority.getAuthority()))) {
-            throw new AccessDeniedException("Only admins can manage kits by house ID");
-        }
+        kitRepository.saveAndFlush(kit);
+        return "Thêm kit thành công";
     }
 
     @Override
@@ -91,13 +78,13 @@ public class KitServiceImpl implements KitService {
     public void updateData(String deviceUid, DataRequest data) {
         kitRepository.findByDeviceUid(deviceUid).filter(kit -> deviceUid.equals(kit.getDeviceUid())).ifPresent(kit -> {
             Location location = kit.getLocation();
-            houseDataPublisher.publish(location.getHouse().getId(), toResponse(location, data));
+            houseDataPublisher.publish(location.getHouse().getId(), toResponse(kit, data));
         });
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<Long> getMyHouseKits() {
+    public List<Long> startMyHouseTelemetry() {
         Long userId = currentUserProvider.getCurrentUserId();
         List<Long> houseIds = houseMemberRepository.findByUserId(userId).stream()
                 .map(member -> member.getHouse().getId())
@@ -115,7 +102,7 @@ public class KitServiceImpl implements KitService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<Long> getHouseKit(long houseId) {
+    public List<Long> startHouseTelemetry(long houseId) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !authentication.isAuthenticated()
                 || authentication.getAuthorities().stream()
@@ -145,14 +132,21 @@ public class KitServiceImpl implements KitService {
     public String sendCommand(long kitId, kitCommand command) {
         Kit kit = kitRepository.findById(kitId)
                 .orElseThrow(() -> new DataNotFoundException("Kit not found"));
+        Long userId = currentUserProvider.getCurrentUserId();
+        Long houseId = kit.getLocation().getHouse().getId();
+        if (!houseMemberRepository.existsByHouseIdAndUserId(houseId, userId)) {
+            throw new AccessDeniedException("You are not a member of this kit's house");
+        }
         commandPublisher.sendCommand(kit.getDeviceUid(), command);
         return "Command sent successfully";
     }
 
-    private DataResponse toResponse(Location location, DataRequest data) {
+    private DataResponse toResponse(Kit kit, DataRequest data) {
         var prediction = firePredictionService.predict(data);
         DataResponse response = modelMapper.map(data, DataResponse.class);
-        response.setLocation(location.getLocationName());
+        response.setKitId(kit.getId());
+        response.setDeviceUid(kit.getDeviceUid());
+        response.setLocation(kit.getLocation().getLocationName());
         response.setStatus(prediction.label());
         response.setConfidence(prediction.confidence());
         return response;
