@@ -2,6 +2,7 @@ package com.firemonitoring.api;
 
 import com.firemonitoring.model.request.kitCommand;
 import com.firemonitoring.model.request.AddKitRequest;
+import com.firemonitoring.model.response.KitResponse;
 import jakarta.validation.Valid;
 import com.firemonitoring.service.KitService;
 import lombok.RequiredArgsConstructor;
@@ -11,6 +12,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import java.util.List;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -25,6 +27,11 @@ public class KitController {
             @PathVariable long houseId,
             @Valid @RequestBody AddKitRequest request) {
         return ResponseEntity.status(201).body(kitService.addKit(houseId, request));
+    }
+
+    @GetMapping("/houses/{houseId}/kits")
+    public ResponseEntity<List<KitResponse>> getHouseKits(@PathVariable long houseId) {
+        return ResponseEntity.ok(kitService.getHouseKits(houseId));
     }
 
     @PostMapping("/houses/{houseId}/telemetry/start")

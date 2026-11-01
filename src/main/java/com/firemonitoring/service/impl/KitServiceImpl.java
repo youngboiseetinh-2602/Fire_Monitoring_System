@@ -8,6 +8,7 @@ import com.firemonitoring.repository.HouseMemberRepository;
 import com.firemonitoring.security.CurrentUserProvider;
 import com.firemonitoring.exception.DataNotFoundException;
 import com.firemonitoring.model.response.DataResponse;
+import com.firemonitoring.model.response.KitResponse;
 import com.firemonitoring.repository.HouseRepository;
 import com.firemonitoring.repository.KitRepository;
 import com.firemonitoring.repository.LocationRepository;
@@ -82,6 +83,19 @@ public class KitServiceImpl implements KitService {
 
     @Override
     @Transactional(readOnly = true)
+    public List<KitResponse> getHouseKits(long houseId) {
+        authorizeHouseAccess(houseId);
+        return locationRepository.findByHouseId(houseId).stream()
+                .map(location -> kitRepository.findByLocationId(location.getId())
+                        .map(kit -> new KitResponse(kit.getId(), kit.getDeviceUid(),
+                                location.getLocationName(), kit.getStatus()))
+                        .orElse(null))
+                .filter(java.util.Objects::nonNull)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public void updateData(String deviceUid, DataRequest data) {
         kitRepository.findByDeviceUid(deviceUid).filter(kit -> deviceUid.equals(kit.getDeviceUid())).ifPresent(kit -> {
             Location location = kit.getLocation();
@@ -110,13 +124,20 @@ public class KitServiceImpl implements KitService {
     @Override
     @Transactional(readOnly = true)
     public List<Long> startHouseTelemetry(long houseId) {
+        authorizeHouseAccess(houseId);
+        return getData(houseId);
+    }
+
+    private void authorizeHouseAccess(long houseId) {
+        if (houseId <= 0 || !houseRepository.existsById(houseId)) {
+            throw new DataNotFoundException("House not found");
+        }
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        boolean admin = hasRole(authentication, "ROLE_ADMIN");
-        if (!admin && !houseMemberRepository.existsByHouseIdAndUserId(
+        if (!hasRole(authentication, "ROLE_ADMIN")
+                && !houseMemberRepository.existsByHouseIdAndUserId(
                 houseId, currentUserProvider.getCurrentUserId())) {
             throw new AccessDeniedException("You are not a member of this house");
         }
-        return getData(houseId);
     }
 
     private boolean hasRole(Authentication authentication, String role) {

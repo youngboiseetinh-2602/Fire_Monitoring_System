@@ -103,12 +103,13 @@ export default function HouseDashboardPage() {
     setKitError(null);
     (async () => {
       try {
-        const ids = await kitApi.startHouseTelemetry(houseId);
+        const kits = await kitApi.getByHouse(houseId);
+        const ids = Array.isArray(kits) ? kits.map(kit => kit.id) : [];
         if (active) {
-          const validIds = Array.isArray(ids) ? ids : [];
-          setKitIds(validIds);
-          setSelectedKitId(validIds[0] ?? null);
+          setKitIds(ids);
+          setSelectedKitId(ids[0] ?? null);
         }
+        kitApi.startHouseTelemetry(houseId).catch(() => {});
       } catch (error) {
         // Dashboard access is separate from device-management permission.
         // A background telemetry 403 must not turn the whole page into an access error.
@@ -144,8 +145,11 @@ export default function HouseDashboardPage() {
       await kitApi.addToHouse(houseId, values);
       setKitModal(false); form.resetFields();
       message.success('Đã thêm kit thành công.');
-      const ids = await kitApi.startHouseTelemetry(houseId);
-      setKitIds(ids || []);
+      const kits = await kitApi.getByHouse(houseId);
+      const ids = Array.isArray(kits) ? kits.map(kit => kit.id) : [];
+      setKitIds(ids);
+      setSelectedKitId(ids[0] ?? null);
+      kitApi.startHouseTelemetry(houseId).catch(() => {});
     } catch (error) { message.error(error.message || 'Không thêm được kit.'); }
   }
 
