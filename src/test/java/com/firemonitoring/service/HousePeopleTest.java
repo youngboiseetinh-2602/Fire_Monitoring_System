@@ -22,9 +22,10 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class HousePeopleTest {
+    private final HouseRepository houses = mock(HouseRepository.class);
     private final HouseMemberRepository members = mock(HouseMemberRepository.class);
     private final UserRepository users = mock(UserRepository.class);
-    private final HouseServiceImpl service = new HouseServiceImpl(mock(HouseRepository.class),
+    private final HouseServiceImpl service = new HouseServiceImpl(houses,
             new ModelMapper(), new SearchBuilderConverter(), members, users, () -> 7L);
     private User owner;
     private User target;
@@ -46,11 +47,13 @@ class HousePeopleTest {
         when(users.findById(7L)).thenReturn(Optional.of(owner));
         when(users.findById(8L)).thenReturn(Optional.of(target));
         when(members.findByUserId(7L)).thenReturn(List.of(ownerMembership));
+        when(members.existsByHouseIdAndUserId(10L, 7L)).thenReturn(true);
+        when(houses.findById(10L)).thenReturn(Optional.of(house));
     }
 
     @Test
     void addsByIdToHouseResolvedFromCurrentUser() {
-        service.addPeople(new HousePeopleRequest(8L));
+        service.addPeople(10L, new HousePeopleRequest(8L));
         verify(members).saveAndFlush(argThat(member -> member.getHouse() == house && member.getUser() == target));
     }
 
@@ -60,7 +63,7 @@ class HousePeopleTest {
         membership.setHouse(house);
         membership.setUser(target);
         when(members.findByHouseIdAndUserId(10L, 8L)).thenReturn(Optional.of(membership));
-        service.removePeople(new HousePeopleRequest(8L));
+        service.removePeople(10L, new HousePeopleRequest(8L));
         verify(members).delete(membership);
         verify(users, never()).delete(any(User.class));
     }
@@ -75,7 +78,7 @@ class HousePeopleTest {
         when(members.findFirstByUserIdOrderByIdAsc(7L)).thenReturn(Optional.of(ownerMembership));
         when(members.findByHouseId(10L)).thenReturn(List.of(ownerMembership, targetMembership));
 
-        var result = service.getMember();
+        var result = service.getMember(10L);
 
         assertEquals(2, result.size());
         assertEquals(7L, result.get(0).getId());
@@ -84,10 +87,10 @@ class HousePeopleTest {
     }
 
     @Test
-    void getMemberRejectsCurrentUserWithoutHouse() {
-        when(members.findFirstByUserIdOrderByIdAsc(7L)).thenReturn(Optional.empty());
+    void getMemberRejectsHouseNotOwnedByCurrentUser() {
+        when(members.existsByHouseIdAndUserId(10L, 7L)).thenReturn(false);
 
-        assertThrows(DataNotFoundException.class, service::getMember);
+        assertThrows(AccessDeniedException.class, () -> service.getMember(10L));
         verify(members, never()).findByHouseId(anyLong());
     }
 
@@ -95,40 +98,34 @@ class HousePeopleTest {
     @EnumSource(value = UserRole.class, names = {"MEMBER", "ADMIN"})
     void onlyOwnerCanAddOrRemove(UserRole role) {
         owner.setRole(role);
-        assertThrows(AccessDeniedException.class, () -> service.addPeople(new HousePeopleRequest(8L)));
-        assertThrows(AccessDeniedException.class, () -> service.removePeople(new HousePeopleRequest(8L)));
-        verifyNoInteractions(members);
+        assertThrows(AccessDeniedException.class, () -> service.addPeople(10L, new HousePeopleRequest(8L)));
+        assertThrows(AccessDeniedException.class, () -> service.removePeople(10L, new HousePeopleRequest(8L)));
     }
 
     @Test
     void rejectsDuplicateMissingMembershipAndSelfRemoval() {
         when(members.existsByHouseIdAndUserId(10L, 8L)).thenReturn(true);
-        assertThrows(ConflictException.class, () -> service.addPeople(new HousePeopleRequest(8L)));
-        assertThrows(DataNotFoundException.class, () -> service.removePeople(new HousePeopleRequest(8L)));
-        assertThrows(ConflictException.class, () -> service.removePeople(new HousePeopleRequest(7L)));
+        assertThrows(ConflictException.class, () -> service.addPeople(10L, new HousePeopleRequest(8L)));
+        assertThrows(DataNotFoundException.class, () -> service.removePeople(10L, new HousePeopleRequest(8L)));
+        assertThrows(ConflictException.class, () -> service.removePeople(10L, new HousePeopleRequest(7L)));
         verify(members, never()).saveAndFlush(any());
         verify(members, never()).delete(any());
     }
 
     @Test
-    void rejectsMissingOrAmbiguousHouse() {
-        when(members.findByUserId(7L)).thenReturn(List.of());
-        assertThrows(DataNotFoundException.class, () -> service.addPeople(new HousePeopleRequest(8L)));
-        House second = new House();
-        second.setId(11L);
-        HouseMember other = new HouseMember();
-        other.setHouse(second);
-        when(members.findByUserId(7L)).thenReturn(List.of(ownerMembership, other));
-        assertThrows(ConflictException.class, () -> service.removePeople(new HousePeopleRequest(8L)));
+    void rejectsInvalidOrUnownedHouse() {
+        assertThrows(IllegalArgumentException.class, () -> service.addPeople(0L, new HousePeopleRequest(8L)));
+        when(members.existsByHouseIdAndUserId(11L, 7L)).thenReturn(false);
+        assertThrows(AccessDeniedException.class, () -> service.removePeople(11L, new HousePeopleRequest(8L)));
     }
 
     @Test
     void rejectsInvalidOrUnknownTarget() {
         for (HousePeopleRequest request : List.of(new HousePeopleRequest(null),
                 new HousePeopleRequest(0L), new HousePeopleRequest(-1L))) {
-            assertThrows(IllegalArgumentException.class, () -> service.addPeople(request));
+            assertThrows(IllegalArgumentException.class, () -> service.addPeople(10L, request));
         }
-        assertThrows(DataNotFoundException.class, () -> service.addPeople(new HousePeopleRequest(999L)));
+        assertThrows(DataNotFoundException.class, () -> service.addPeople(10L, new HousePeopleRequest(999L)));
         verify(members, never()).saveAndFlush(any());
     }
 }
