@@ -124,6 +124,11 @@ public class HouseServiceImpl implements HouseService {
             return findAll(page);
         }
         Specification<House> specification = HouseSpecification.from(criteria);
+        User currentUser = getCurrentUser();
+        if (currentUser.getRole() != UserRole.ADMIN) {
+            List<Long> allowedIds = currentHouseIds(currentUser.getId());
+            specification = specification.and((root, query, builder) -> root.get("id").in(allowedIds));
+        }
         Pageable pageable = PageRequest.of(page, 20, Sort.by("id").ascending());
         return houseRepository.findAll(specification, pageable)
                 .map(house -> modelMapper.map(house, houseResponse.class));
@@ -136,19 +141,25 @@ public class HouseServiceImpl implements HouseService {
             throw new IllegalArgumentException("Page must not be negative");
         }
         PageRequest pageable = PageRequest.of(page, 20, Sort.by("id").ascending());
-        return houseRepository.findAll(pageable)
+        User currentUser = getCurrentUser();
+        Page<House> houses = currentUser.getRole() == UserRole.ADMIN
+                ? houseRepository.findAll(pageable)
+                : houseRepository.findByIdIn(currentHouseIds(currentUser.getId()), pageable);
+        return houses
                 .map(house -> modelMapper.map(house, houseResponse.class));
     }
 
     @Override
     @Transactional
     public String createHouse(houseRequest request) {
+        User currentUser = getCurrentUser();
+        if (currentUser.getRole() != UserRole.MEMBER || !currentHouseIds(currentUser.getId()).isEmpty()) {
+            throw new AccessDeniedException("Only a member without a house can create one");
+        }
         House house = modelMapper.map(request, House.class);
         house.setStatus(HouseStatus.NORMAL);
         House savedHouse = houseRepository.save(house);
 
-        User currentUser = userRepository.findById(currentUserProvider.getCurrentUserId())
-                .orElseThrow(() -> new DataNotFoundException("Current user not found"));
         currentUser.setRole(UserRole.OWNER);
         userRepository.save(currentUser);
 
@@ -165,11 +176,29 @@ public class HouseServiceImpl implements HouseService {
     public houseResponse updateHouse(long houseId, houseUpdateRequest request) {
         House house = houseRepository.findById(houseId)
                 .orElseThrow(() -> new DataNotFoundException("House not found"));
+        User currentUser = getCurrentUser();
+        if (currentUser.getRole() != UserRole.ADMIN
+                && (currentUser.getRole() != UserRole.OWNER
+                || !houseMemberRepository.existsByHouseIdAndUserId(houseId, currentUser.getId()))) {
+            throw new AccessDeniedException("You cannot update this house");
+        }
         house.setHouseName(request.getHouseName());
         house.setCity(request.getCity());
         house.setWard(request.getWard());
         house.setAddressDetail(request.getAddressDetail());
         house.setStatus(request.getStatus());
         return modelMapper.map(houseRepository.save(house), houseResponse.class);
+    }
+
+    private User getCurrentUser() {
+        return userRepository.findById(currentUserProvider.getCurrentUserId())
+                .orElseThrow(() -> new DataNotFoundException("Current user not found"));
+    }
+
+    private List<Long> currentHouseIds(Long userId) {
+        return houseMemberRepository.findByUserId(userId).stream()
+                .map(member -> member.getHouse().getId())
+                .distinct()
+                .toList();
     }
 }

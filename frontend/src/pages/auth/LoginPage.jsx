@@ -31,6 +31,7 @@ export default function LoginPage() {
     <Typography.Paragraph type="secondary">Đăng nhập để quản lý nhà ở và thông tin của bạn.</Typography.Paragraph>
     {expired && <Alert showIcon type="warning" message="Phiên đã hết hạn. Vui lòng đăng nhập lại." className="api-error" />}
     {location.state?.registered && <Alert showIcon type="success" message="Đăng ký thành công. Bạn có thể đăng nhập ngay." className="api-error" />}
+    {location.state?.houseCreated && <Alert showIcon type="success" message="Đã tạo nhà. Vui lòng đăng nhập lại để nhận quyền Chủ nhà." className="api-error" />}
     <ApiError error={error} />
     <Form form={form} layout="vertical" onFinish={submit} disabled={pending} requiredMark="optional">
       <Form.Item name="username" label="Tên đăng nhập" rules={[required('Tên đăng nhập'), maxLength(50)]}>

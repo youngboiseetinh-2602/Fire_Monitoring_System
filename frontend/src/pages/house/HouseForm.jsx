@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { houseApi } from '../../api/houseApi';
 import { ApiError } from '../../components/common/Feedback';
 import { applyFieldErrors, maxLength, required } from '../../components/common/formRules';
+import { useAuth } from '../../auth/AuthContext';
 
 export default function HouseForm({ house, returnTo = '/app/houses' }) {
   const editing = Boolean(house);
@@ -13,6 +14,7 @@ export default function HouseForm({ house, returnTo = '/app/houses' }) {
   const [error, setError] = useState(null);
   const { notification, modal } = App.useApp();
   const navigate = useNavigate();
+  const { logout } = useAuth();
 
   async function save(values) {
     setPending(true); setError(null);
@@ -20,7 +22,12 @@ export default function HouseForm({ house, returnTo = '/app/houses' }) {
       if (editing) await houseApi.update(house.id, values);
       else await houseApi.create(values);
       notification.success({ message: editing ? 'Đã cập nhật ngôi nhà' : 'Đã tạo ngôi nhà mới' });
-      navigate(returnTo, { replace: true });
+      if (editing) navigate(returnTo, { replace: true });
+      else {
+        // The server promotes MEMBER to OWNER. Sign in again so the JWT contains the new role.
+        logout();
+        navigate('/login', { replace: true, state: { houseCreated: true } });
+      }
     } catch (failure) { setError(failure); applyFieldErrors(form, failure); }
     finally { setPending(false); }
   }

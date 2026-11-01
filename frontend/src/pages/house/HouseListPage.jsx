@@ -8,8 +8,10 @@ import { ApiError, Loading } from '../../components/common/Feedback';
 import PageHeader from '../../components/common/PageHeader';
 import StatusTag from '../../components/common/StatusTag';
 import HouseSearch from './HouseSearch';
+import { useAuth } from '../../auth/AuthContext';
 
 export default function HouseListPage() {
+  const { user } = useAuth();
   const [params, setParams] = useSearchParams();
   const [query, setQuery] = useState({ loading: true });
   const [retryCount, setRetryCount] = useState(0);
@@ -19,6 +21,8 @@ export default function HouseListPage() {
   const filtered = Object.keys(filters).length > 0;
   const requestedPage = Number(params.get('page') || 0);
   const page = Number.isSafeInteger(requestedPage) && requestedPage >= 0 ? requestedPage : 0;
+  const canEdit = user?.role === 'ADMIN' || user?.role === 'OWNER';
+  const canCreate = user?.role === 'MEMBER' && !query.loading && !query.error && query.data?.totalElements === 0;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -57,9 +61,9 @@ export default function HouseListPage() {
         <Link to={`/app/houses/${house.id}/dashboard`} state={{ houseName: house.houseName }}>
           <Button type="primary" icon={<DashboardOutlined />}>Giám sát</Button>
         </Link>
-        <Link to={`/app/houses/${house.id}/edit`} state={{ house, returnTo: location.pathname + location.search }}>
+        {canEdit && <Link to={`/app/houses/${house.id}/edit`} state={{ house, returnTo: location.pathname + location.search }}>
           <Button icon={<EditOutlined />} aria-label={`Sửa ${house.houseName}`}>Sửa</Button>
-        </Link>
+        </Link>}
       </Flex>
     ) },
   ];
@@ -68,7 +72,7 @@ export default function HouseListPage() {
     <PageHeader title="Quản lý nhà ở" description="Một nơi để theo dõi và quản lý các ngôi nhà trong hệ thống." />
     <Flex justify="space-between" align="center" wrap className="section-toolbar">
       <Typography.Title level={2}>Danh sách ngôi nhà</Typography.Title>
-      <Link to="/app/houses/new" className="create-house-link"><Button type="primary" icon={<PlusOutlined />}>Thêm ngôi nhà</Button></Link>
+      {canCreate && <Link to="/app/houses/new" className="create-house-link"><Button type="primary" icon={<PlusOutlined />}>Thêm ngôi nhà</Button></Link>}
     </Flex>
     <div className="content-stack">
       <HouseSearch key={filterKey} filters={filters} onSearch={search} onReset={() => setParams({})} />

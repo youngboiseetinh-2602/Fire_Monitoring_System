@@ -52,6 +52,13 @@ public class KitServiceImpl implements KitService {
         }
         var house = houseRepository.findById(houseId)
                 .orElseThrow(() -> new DataNotFoundException("House not found"));
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        boolean admin = hasRole(authentication, "ROLE_ADMIN");
+        boolean owner = hasRole(authentication, "ROLE_OWNER");
+        if (!admin && (!owner || !houseMemberRepository.existsByHouseIdAndUserId(
+                houseId, currentUserProvider.getCurrentUserId()))) {
+            throw new AccessDeniedException("Only the house owner or an admin can add kits");
+        }
         String locationName = request.location().strip();
         String deviceUid = request.deviceUid().strip();
         if (!deviceUid.matches("[^/+#\\s\\x00]{1,100}")) {
@@ -104,12 +111,16 @@ public class KitServiceImpl implements KitService {
     @Transactional(readOnly = true)
     public List<Long> startHouseTelemetry(long houseId) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || !authentication.isAuthenticated()
-                || authentication.getAuthorities().stream()
-                .noneMatch(authority -> "ROLE_ADMIN".equals(authority.getAuthority()))) {
+        if (!hasRole(authentication, "ROLE_ADMIN")) {
             throw new AccessDeniedException("Only admins can request kits by house ID");
         }
         return getData(houseId);
+    }
+
+    private boolean hasRole(Authentication authentication, String role) {
+        return authentication != null && authentication.isAuthenticated()
+                && authentication.getAuthorities().stream()
+                .anyMatch(authority -> role.equals(authority.getAuthority()));
     }
 
     private List<Long> getData(long houseId) {

@@ -62,11 +62,13 @@ public class HouseController {
     }
 
     @PostMapping(value = "/createHouse", produces = "text/plain;charset=UTF-8")
+    @PreAuthorize("hasRole('MEMBER')")
     public ResponseEntity<String> createHouse(@RequestBody @Valid houseRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(houseService.createHouse(request));
     }
 
     @PutMapping("/updateHouse/{houseId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OWNER')")
     public ResponseEntity<houseResponse> updateHouse(
             @PathVariable("houseId") long houseId,
             @RequestBody @Valid houseUpdateRequest request) {

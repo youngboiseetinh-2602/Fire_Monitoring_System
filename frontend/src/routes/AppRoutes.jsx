@@ -15,7 +15,7 @@ import EditHousePage from '../pages/house/EditHousePage';
 import HouseDashboardPage from '../pages/house/HouseDashboardPage';
 import HouseMembersPage from '../pages/house/HouseMembersPage';
 
-function RequireAuth({ admin = false, owner = false }) {
+function RequireAuth({ admin = false, owner = false, roles }) {
   const { user } = useAuth();
   const location = useLocation();
   if (!user) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
@@ -23,6 +23,8 @@ function RequireAuth({ admin = false, owner = false }) {
     subTitle="Trang này dành cho quản trị viên." extra={<Link to="/app/houses"><Button>Về nhà ở</Button></Link>} />;
   if (owner && user.role !== 'OWNER') return <Result status="403" title="Không có quyền truy cập"
     subTitle="Trang này dành cho chủ nhà." extra={<Link to="/app/houses"><Button>Về nhà ở</Button></Link>} />;
+  if (roles && !roles.includes(user.role)) return <Result status="403" title="Không có quyền truy cập"
+    subTitle="Vai trò của bạn không được phép thực hiện thao tác này." extra={<Link to="/app/houses"><Button>Về nhà ở</Button></Link>} />;
   return <Outlet />;
 }
 
@@ -43,8 +45,12 @@ export default function AppRoutes() {
       <Route path="/app" element={<MainLayout />}>
         <Route index element={<Navigate to="houses" replace />} />
         <Route path="houses" element={<HouseListPage />} />
-        <Route path="houses/new" element={<CreateHousePage />} />
-        <Route path="houses/:houseId/edit" element={<EditHousePage />} />
+        <Route element={<RequireAuth roles={['MEMBER']} />}>
+          <Route path="houses/new" element={<CreateHousePage />} />
+        </Route>
+        <Route element={<RequireAuth roles={['ADMIN', 'OWNER']} />}>
+          <Route path="houses/:houseId/edit" element={<EditHousePage />} />
+        </Route>
         {/* Đã thêm route cho Dashboard ở đây */}
         <Route path="houses/:houseId/dashboard" element={<HouseDashboardPage />} />
         <Route element={<RequireAuth owner />}>

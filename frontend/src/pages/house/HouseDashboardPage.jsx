@@ -67,6 +67,8 @@ export default function HouseDashboardPage() {
   const { user } = useAuth();
   const houseName = location.state?.houseName || `Nhà #${houseId}`;
   const admin = user?.role === 'ADMIN';
+  const owner = user?.role === 'OWNER';
+  const canAddKit = admin || owner;
   const [kitIds, setKitIds] = useState([]);
   const [loading, setLoading] = useState(true);
   const [kitError, setKitError] = useState(null);
@@ -159,8 +161,8 @@ export default function HouseDashboardPage() {
     <PageHeader title={`Giám sát: ${houseName}`} description={<Space><Badge status={connected ? 'success' : 'default'} text={connected ? 'Đang nhận dữ liệu realtime' : 'Chưa kết nối realtime'} />{kitIds.length > 0 && <Tag color="blue">{kitIds.length} thiết bị</Tag>}</Space>} />
     {fire && <Alert type="error" showIcon icon={<FireOutlined />} message="CẢNH BÁO CHÁY" description="Thiết bị phát hiện dấu hiệu cháy. Hãy kiểm tra khu vực ngay." banner style={{ marginBottom: 20 }} />}
     {kitError && <Alert type="error" showIcon message={kitError.message || 'Không tải được danh sách thiết bị.'} action={<Button size="small" onClick={() => setKitRetry(value => value + 1)}>Thử lại</Button>} style={{ marginBottom: 16 }} />}
-    {!loading && kitIds.length === 0 && <Alert type="info" showIcon message="Nhà chưa có kit được liên kết." description={admin ? 'Thêm kit để bắt đầu nhận dữ liệu cảm biến.' : 'Chưa tìm thấy thiết bị trong các nhà bạn tham gia.'} action={admin && <Button size="small" type="primary" icon={<PlusOutlined />} onClick={() => setKitModal(true)}>Thêm kit</Button>} style={{ marginBottom: 20 }} />}
-    <Flex justify="space-between" align="center" wrap gap="small"><Typography.Title level={4}>Thông số môi trường</Typography.Title>{admin && <Button icon={<PlusOutlined />} onClick={() => setKitModal(true)}>Thêm kit</Button>}</Flex>
+    {!loading && kitIds.length === 0 && <Alert type="info" showIcon message="Nhà chưa có kit được liên kết." description={canAddKit ? 'Thêm kit để bắt đầu nhận dữ liệu cảm biến.' : 'Chưa tìm thấy thiết bị trong các nhà bạn tham gia.'} action={canAddKit && <Button size="small" type="primary" icon={<PlusOutlined />} onClick={() => setKitModal(true)}>Thêm kit</Button>} style={{ marginBottom: 20 }} />}
+    <Flex justify="space-between" align="center" wrap gap="small"><Typography.Title level={4}>Thông số môi trường</Typography.Title>{canAddKit && <Button icon={<PlusOutlined />} onClick={() => setKitModal(true)}>Thêm kit</Button>}</Flex>
     {!hasTelemetry && kitIds.length > 0 && <Alert type="info" showIcon message="Đang chờ dữ liệu cảm biến đầu tiên" description="Các chỉ số sẽ xuất hiện khi kit gửi telemetry và kết nối realtime hoạt động." style={{ marginBottom: 16 }} />}
     <Row gutter={[16, 16]}>
       <Col xs={12} lg={6}><Card><Statistic title="Nhiệt độ" value={sensor.temperature ?? '—'} suffix={sensor.temperature == null ? '' : '°C'} prefix={<DashboardOutlined />} /></Card></Col>

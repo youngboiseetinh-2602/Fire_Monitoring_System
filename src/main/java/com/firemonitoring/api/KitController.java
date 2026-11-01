@@ -20,6 +20,7 @@ public class KitController {
     private final KitService kitService;
 
     @PostMapping(value = "/houses/{houseId}/kits", produces = "text/plain;charset=UTF-8")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OWNER')")
     public ResponseEntity<String> addKit(
             @PathVariable long houseId,
             @Valid @RequestBody AddKitRequest request) {
