@@ -45,7 +45,7 @@ export default function AppRoutes() {
       <Route path="/app" element={<MainLayout />}>
         <Route index element={<Navigate to="houses" replace />} />
         <Route path="houses" element={<HouseListPage />} />
-        <Route element={<RequireAuth roles={['MEMBER']} />}>
+        <Route element={<RequireAuth roles={['MEMBER', 'OWNER']} />}>
           <Route path="houses/new" element={<CreateHousePage />} />
         </Route>
         <Route element={<RequireAuth roles={['ADMIN', 'OWNER']} />}>
@@ -54,7 +54,7 @@ export default function AppRoutes() {
         {/* Đã thêm route cho Dashboard ở đây */}
         <Route path="houses/:houseId/dashboard" element={<HouseDashboardPage />} />
         <Route element={<RequireAuth owner />}>
-          <Route path="members" element={<HouseMembersPage />} />
+          <Route path="houses/:houseId/members" element={<HouseMembersPage />} />
         </Route>
         <Route path="profile" element={<UserDetailPage own />} />
         <Route path="profile/edit" element={<EditProfilePage />} />

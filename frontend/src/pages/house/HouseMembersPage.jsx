@@ -7,6 +7,7 @@ import { houseApi } from '../../api/houseApi';
 import { userApi } from '../../api/userApi';
 import { cleanFilters } from '../../api/query';
 import { useAuth } from '../../auth/AuthContext';
+import { useLocation, useParams } from 'react-router-dom';
 import { ApiError, Loading } from '../../components/common/Feedback';
 import PageHeader from '../../components/common/PageHeader';
 import StatusTag from '../../components/common/StatusTag';
@@ -14,6 +15,9 @@ import StatusTag from '../../components/common/StatusTag';
 const searchFields = ['username', 'fullName', 'cccd'];
 
 export default function HouseMembersPage() {
+  const { houseId } = useParams();
+  const location = useLocation();
+  const houseName = location.state?.houseName || `Nhà #${houseId}`;
   const { user } = useAuth();
   const { message } = App.useApp();
   const [members, setMembers] = useState({ loading: true, data: [] });
@@ -29,12 +33,12 @@ export default function HouseMembersPage() {
   const loadMembers = useCallback(async () => {
     setMembers(current => ({ ...current, loading: true, error: null }));
     try {
-      const data = await houseApi.getMembers();
+      const data = await houseApi.getMembers(houseId);
       setMembers({ loading: false, data: Array.isArray(data) ? data : [] });
     } catch (error) {
       setMembers(current => ({ ...current, loading: false, error }));
     }
-  }, []);
+  }, [houseId]);
 
   useEffect(() => { loadMembers(); }, [loadMembers]);
 
@@ -58,7 +62,7 @@ export default function HouseMembersPage() {
   async function addMember(candidate) {
     setAddingId(candidate.id);
     try {
-      await houseApi.addPeople({ userId: candidate.id });
+      await houseApi.addPeople(houseId, { userId: candidate.id });
       message.success(`Đã thêm ${candidate.fullName || candidate.username} vào nhà.`);
       await loadMembers();
     } catch (error) {
@@ -72,7 +76,7 @@ export default function HouseMembersPage() {
     if (!selected) return;
     setRemoving(true);
     try {
-      await houseApi.removePeople({ userId: selected.id });
+      await houseApi.removePeople(houseId, { userId: selected.id });
       message.success(`Đã xóa ${selected.fullName || selected.username} khỏi nhà.`);
       setSelected(null);
       await loadMembers();
@@ -98,7 +102,7 @@ export default function HouseMembersPage() {
   ];
 
   return <>
-    <PageHeader title="Thành viên trong nhà" description="Xem, thêm hoặc xóa người dùng thuộc ngôi nhà của bạn." />
+    <PageHeader title={`Thành viên: ${houseName}`} description="Xem, thêm hoặc xóa người dùng thuộc ngôi nhà này." />
     <div className="content-stack">
       <Card className="content-card" title="Danh sách thành viên" extra={<Button type="primary" shape="circle" icon={<PlusOutlined />} aria-label="Thêm thành viên" onClick={() => setAddOpen(true)} />}>
         {members.loading ? <Loading /> : members.error ? <ApiError error={members.error} retry={loadMembers} /> : <Table rowKey="id" columns={memberColumns} dataSource={members.data} scroll={{ x: 'max-content' }} locale={{ emptyText: <Empty description="Nhà chưa có thành viên" /> }} pagination={{ pageSize: 8, showSizeChanger: false }} onRow={member => ({ onClick: () => setSelected(member), style: { cursor: 'pointer' } })} />}

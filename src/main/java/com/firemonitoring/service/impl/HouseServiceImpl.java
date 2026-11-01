@@ -45,9 +45,9 @@ public class HouseServiceImpl implements HouseService {
 
     @Override
     @Transactional
-    public String addPeople(HousePeopleRequest request) {
+    public String addPeople(long houseId, HousePeopleRequest request) {
         Long ownerId = currentUserProvider.getCurrentUserId();
-        House house = findOwnerHouse(ownerId);
+        House house = findOwnedHouse(ownerId, houseId);
         User target = findTarget(request);
         if (houseMemberRepository.existsByHouseIdAndUserId(house.getId(), target.getId())) {
             throw new ConflictException("User already belongs to this house");
@@ -61,9 +61,9 @@ public class HouseServiceImpl implements HouseService {
 
     @Override
     @Transactional
-    public String removePeople(HousePeopleRequest request) {
+    public String removePeople(long houseId, HousePeopleRequest request) {
         Long ownerId = currentUserProvider.getCurrentUserId();
-        House house = findOwnerHouse(ownerId);
+        House house = findOwnedHouse(ownerId, houseId);
         User target = findTarget(request);
         if (ownerId.equals(target.getId())) {
             throw new ConflictException("You cannot remove yourself from your house");
@@ -76,33 +76,27 @@ public class HouseServiceImpl implements HouseService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<userResponse> getMember() {
+    public List<userResponse> getMember(long houseId) {
         Long userId = currentUserProvider.getCurrentUserId();
-        House house = houseMemberRepository.findFirstByUserIdOrderByIdAsc(userId)
-                .map(HouseMember::getHouse)
-                .orElseThrow(() -> new DataNotFoundException("You do not belong to any house"));
+        House house = findOwnedHouse(userId, houseId);
 
         return houseMemberRepository.findByHouseId(house.getId()).stream()
                 .map(member -> modelMapper.map(member.getUser(), userResponse.class))
                 .toList();
     }
 
-    private House findOwnerHouse(Long ownerId) {
+    private House findOwnedHouse(Long ownerId, long houseId) {
         User owner = userRepository.findById(ownerId)
                 .orElseThrow(() -> new DataNotFoundException("Current user not found"));
         if (owner.getRole() != UserRole.OWNER) {
             throw new AccessDeniedException("Only owners can manage house members");
         }
-        var houses = houseMemberRepository.findByUserId(ownerId).stream()
-                .map(HouseMember::getHouse)
-                .collect(java.util.stream.Collectors.toMap(House::getId, house -> house, (first, second) -> first));
-        if (houses.isEmpty()) {
-            throw new DataNotFoundException("You do not belong to any house");
+        if (houseId <= 0) throw new IllegalArgumentException("Provide a positive house ID");
+        if (!houseMemberRepository.existsByHouseIdAndUserId(houseId, ownerId)) {
+            throw new AccessDeniedException("You do not own this house");
         }
-        if (houses.size() != 1) {
-            throw new ConflictException("Multiple houses found; cannot determine which house to manage");
-        }
-        return houses.values().iterator().next();
+        return houseRepository.findById(houseId)
+                .orElseThrow(() -> new DataNotFoundException("House not found"));
     }
 
     private User findTarget(HousePeopleRequest request) {
@@ -153,15 +147,17 @@ public class HouseServiceImpl implements HouseService {
     @Transactional
     public String createHouse(houseRequest request) {
         User currentUser = getCurrentUser();
-        if (currentUser.getRole() != UserRole.MEMBER || !currentHouseIds(currentUser.getId()).isEmpty()) {
-            throw new AccessDeniedException("Only a member without a house can create one");
+        if (currentUser.getRole() != UserRole.MEMBER && currentUser.getRole() != UserRole.OWNER) {
+            throw new AccessDeniedException("Only members and owners can create houses");
         }
         House house = modelMapper.map(request, House.class);
         house.setStatus(HouseStatus.NORMAL);
         House savedHouse = houseRepository.save(house);
 
-        currentUser.setRole(UserRole.OWNER);
-        userRepository.save(currentUser);
+        if (currentUser.getRole() == UserRole.MEMBER) {
+            currentUser.setRole(UserRole.OWNER);
+            userRepository.save(currentUser);
+        }
 
         HouseMember ownerMembership = new HouseMember();
         ownerMembership.setHouse(savedHouse);

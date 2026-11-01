@@ -30,22 +30,22 @@ import java.util.List;
 public class HouseController {
     private final HouseService houseService;
 
-    @PostMapping("/me/people")
+    @PostMapping("/{houseId}/people")
     @PreAuthorize("hasRole('OWNER')")
-    public ResponseEntity<String> addPeople(@RequestBody @Valid HousePeopleRequest request) {
-        return ResponseEntity.ok(houseService.addPeople(request));
+    public ResponseEntity<String> addPeople(@PathVariable long houseId, @RequestBody @Valid HousePeopleRequest request) {
+        return ResponseEntity.ok(houseService.addPeople(houseId, request));
     }
 
-    @DeleteMapping("/me/people")
+    @DeleteMapping("/{houseId}/people")
     @PreAuthorize("hasRole('OWNER')")
-    public ResponseEntity<String> removePeople(@RequestBody @Valid HousePeopleRequest request) {
-        return ResponseEntity.ok(houseService.removePeople(request));
+    public ResponseEntity<String> removePeople(@PathVariable long houseId, @RequestBody @Valid HousePeopleRequest request) {
+        return ResponseEntity.ok(houseService.removePeople(houseId, request));
     }
 
-    @GetMapping("/me/people")
+    @GetMapping("/{houseId}/people")
     @PreAuthorize("hasRole('OWNER')")
-    public ResponseEntity<List<userResponse>> getMember() {
-        return ResponseEntity.ok(houseService.getMember());
+    public ResponseEntity<List<userResponse>> getMember(@PathVariable long houseId) {
+        return ResponseEntity.ok(houseService.getMember(houseId));
     }
 
     @GetMapping
@@ -62,7 +62,7 @@ public class HouseController {
     }
 
     @PostMapping(value = "/createHouse", produces = "text/plain;charset=UTF-8")
-    @PreAuthorize("hasRole('MEMBER')")
+    @PreAuthorize("hasAnyRole('MEMBER', 'OWNER')")
     public ResponseEntity<String> createHouse(@RequestBody @Valid houseRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(houseService.createHouse(request));
     }

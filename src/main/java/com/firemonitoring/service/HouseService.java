@@ -9,11 +9,11 @@ import java.util.List;
 import java.util.Map;
 
 public interface HouseService {
-    String addPeople(com.firemonitoring.model.request.HousePeopleRequest request);
+    String addPeople(long houseId, com.firemonitoring.model.request.HousePeopleRequest request);
 
-    String removePeople(com.firemonitoring.model.request.HousePeopleRequest request);
+    String removePeople(long houseId, com.firemonitoring.model.request.HousePeopleRequest request);
 
-    List<userResponse> getMember();
+    List<userResponse> getMember(long houseId);
 
     Page<houseResponse> findHouse(Map<String, ?> params, int page);
 

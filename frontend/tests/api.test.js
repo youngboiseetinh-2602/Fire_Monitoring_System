@@ -60,13 +60,13 @@ test('create and update house use exact DTO fields and bearer token', async () =
   await houseApi.update(10, { ...values, status: 'FIRE', id: 10 });
 });
 
-test('owner member management uses the current house endpoints', async () => {
-  capture(config => { assert.equal(config.url, '/houses/me/people'); assert.equal(config.method, 'get'); });
-  await houseApi.getMembers();
-  capture(config => { assert.equal(config.url, '/houses/me/people'); assert.deepEqual(JSON.parse(config.data), { userId: 8 }); });
-  await houseApi.addPeople({ userId: 8 });
-  capture(config => { assert.equal(config.url, '/houses/me/people'); assert.equal(config.method, 'delete'); assert.deepEqual(JSON.parse(config.data), { userId: 8 }); });
-  await houseApi.removePeople({ userId: 8 });
+test('owner member management is scoped to the selected house', async () => {
+  capture(config => { assert.equal(config.url, '/houses/10/people'); assert.equal(config.method, 'get'); });
+  await houseApi.getMembers(10);
+  capture(config => { assert.equal(config.url, '/houses/10/people'); assert.deepEqual(JSON.parse(config.data), { userId: 8 }); });
+  await houseApi.addPeople(10, { userId: 8 });
+  capture(config => { assert.equal(config.url, '/houses/10/people'); assert.equal(config.method, 'delete'); assert.deepEqual(JSON.parse(config.data), { userId: 8 }); });
+  await houseApi.removePeople(10, { userId: 8 });
 });
 
 test('user search only sends supported fields; profile cannot change role or username', async () => {

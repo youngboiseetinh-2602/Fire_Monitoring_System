@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Avatar, Button, Card, Empty, Flex, Table, Typography } from 'antd';
-import { EditOutlined, HomeOutlined, PlusOutlined, DashboardOutlined } from '@ant-design/icons';
+import { EditOutlined, HomeOutlined, PlusOutlined, DashboardOutlined, TeamOutlined } from '@ant-design/icons';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { houseApi } from '../../api/houseApi';
 import { cleanFilters } from '../../api/query';
@@ -22,7 +22,7 @@ export default function HouseListPage() {
   const requestedPage = Number(params.get('page') || 0);
   const page = Number.isSafeInteger(requestedPage) && requestedPage >= 0 ? requestedPage : 0;
   const canEdit = user?.role === 'ADMIN' || user?.role === 'OWNER';
-  const canCreate = user?.role === 'MEMBER' && !query.loading && !query.error && query.data?.totalElements === 0;
+  const canCreate = user?.role === 'MEMBER' || user?.role === 'OWNER';
 
   useEffect(() => {
     const controller = new AbortController();
@@ -63,6 +63,9 @@ export default function HouseListPage() {
         </Link>
         {canEdit && <Link to={`/app/houses/${house.id}/edit`} state={{ house, returnTo: location.pathname + location.search }}>
           <Button icon={<EditOutlined />} aria-label={`Sửa ${house.houseName}`}>Sửa</Button>
+        </Link>}
+        {user?.role === 'OWNER' && <Link to={`/app/houses/${house.id}/members`} state={{ houseName: house.houseName }}>
+          <Button icon={<TeamOutlined />}>Thành viên</Button>
         </Link>}
       </Flex>
     ) },

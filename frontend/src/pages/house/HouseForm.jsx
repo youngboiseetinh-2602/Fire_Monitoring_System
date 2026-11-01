@@ -14,7 +14,7 @@ export default function HouseForm({ house, returnTo = '/app/houses' }) {
   const [error, setError] = useState(null);
   const { notification, modal } = App.useApp();
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
 
   async function save(values) {
     setPending(true); setError(null);
@@ -22,7 +22,7 @@ export default function HouseForm({ house, returnTo = '/app/houses' }) {
       if (editing) await houseApi.update(house.id, values);
       else await houseApi.create(values);
       notification.success({ message: editing ? 'Đã cập nhật ngôi nhà' : 'Đã tạo ngôi nhà mới' });
-      if (editing) navigate(returnTo, { replace: true });
+      if (editing || user?.role === 'OWNER') navigate(returnTo, { replace: true });
       else {
         // The server promotes MEMBER to OWNER. Sign in again so the JWT contains the new role.
         logout();
