@@ -3,6 +3,7 @@ package com.firemonitoring.service.impl;
 import com.firemonitoring.entity.Location;
 import com.firemonitoring.entity.Kit;
 import com.firemonitoring.exception.ConflictException;
+import com.firemonitoring.exception.ServiceUnavailableException;
 import com.firemonitoring.model.request.AddKitRequest;
 import com.firemonitoring.repository.HouseMemberRepository;
 import com.firemonitoring.security.CurrentUserProvider;
@@ -25,6 +26,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -32,6 +35,7 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 public class KitServiceImpl implements KitService {
+    private static final Logger log = LoggerFactory.getLogger(KitServiceImpl.class);
     private final HouseRepository houseRepository;
     private final LocationRepository locationRepository;
     private final KitRepository kitRepository;
@@ -176,13 +180,21 @@ public class KitServiceImpl implements KitService {
     }
 
     private DataResponse toResponse(Kit kit, DataRequest data) {
-        var prediction = firePredictionService.predict(data);
         DataResponse response = modelMapper.map(data, DataResponse.class);
         response.setKitId(kit.getId());
         response.setDeviceUid(kit.getDeviceUid());
         response.setLocation(kit.getLocation().getLocationName());
-        response.setStatus(prediction.label());
-        response.setConfidence(prediction.confidence());
+        try {
+            var prediction = firePredictionService.predict(data);
+            response.setStatus(prediction.label());
+            response.setConfidence(prediction.confidence());
+        } catch (ServiceUnavailableException exception) {
+            // Prediction enriches telemetry; it must never prevent live sensor data from reaching clients.
+            response.setStatus(data.flame() ? com.firemonitoring.enums.EventType.FIRE
+                    : com.firemonitoring.enums.EventType.NORMAL);
+            response.setConfidence(0.0);
+            log.warn("Prediction service unavailable; publishing fallback telemetry for kit {}", kit.getId());
+        }
         return response;
     }
 }
