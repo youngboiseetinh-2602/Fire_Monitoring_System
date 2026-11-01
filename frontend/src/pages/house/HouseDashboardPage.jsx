@@ -110,7 +110,9 @@ export default function HouseDashboardPage() {
           setSelectedKitId(validIds[0] ?? null);
         }
       } catch (error) {
-        if (active && error.status !== 404) setKitError(error);
+        // Dashboard access is separate from device-management permission.
+        // A background telemetry 403 must not turn the whole page into an access error.
+        if (active && ![403, 404].includes(error.status)) setKitError(error);
         if (active) setKitIds([]);
       } finally { if (active) setLoading(false); }
     })();
