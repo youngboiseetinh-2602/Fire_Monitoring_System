@@ -19,8 +19,10 @@ export function normalizeError(failure) {
     404: 'Không tìm thấy thông tin yêu cầu.',
     409: 'Thông tin này đã được sử dụng. Vui lòng kiểm tra lại.',
   };
+  const serverDetail = typeof data?.detail === 'string' ? data.detail : null;
   const message = status >= 500 ? 'Máy chủ gặp lỗi. Vui lòng thử lại sau.'
-    : messages[status] || (status ? 'Không thể thực hiện yêu cầu.' : 'Không thể kết nối máy chủ. Vui lòng thử lại.');
+    : (status === 409 && serverDetail) || messages[status]
+      || (status ? 'Không thể thực hiện yêu cầu.' : 'Không thể kết nối máy chủ. Vui lòng thử lại.');
   const error = new Error(message);
   error.status = status;
   error.fields = data?.validationErrors || (status === 400 && data && typeof data === 'object' && !data.status

@@ -103,7 +103,7 @@ export default function HouseDashboardPage() {
     setKitError(null);
     (async () => {
       try {
-        const ids = admin ? await kitApi.startHouseTelemetry(houseId) : await kitApi.startMyHouseTelemetry();
+        const ids = await kitApi.startHouseTelemetry(houseId);
         if (active) {
           const validIds = Array.isArray(ids) ? ids : [];
           setKitIds(validIds);
@@ -142,7 +142,7 @@ export default function HouseDashboardPage() {
       await kitApi.addToHouse(houseId, values);
       setKitModal(false); form.resetFields();
       message.success('Đã thêm kit thành công.');
-      const ids = admin ? await kitApi.startHouseTelemetry(houseId) : await kitApi.startMyHouseTelemetry();
+      const ids = await kitApi.startHouseTelemetry(houseId);
       setKitIds(ids || []);
     } catch (error) { message.error(error.message || 'Không thêm được kit.'); }
   }

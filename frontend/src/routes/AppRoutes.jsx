@@ -1,4 +1,4 @@
-import { Button, Result } from 'antd';
+import { Button, Result, Spin } from 'antd';
 import { Link, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import PublicLayout from '../components/layout/PublicLayout';
@@ -16,8 +16,9 @@ import HouseDashboardPage from '../pages/house/HouseDashboardPage';
 import HouseMembersPage from '../pages/house/HouseMembersPage';
 
 function RequireAuth({ admin = false, owner = false, roles }) {
-  const { user } = useAuth();
+  const { user, initializing } = useAuth();
   const location = useLocation();
+  if (initializing) return <Spin fullscreen tip="Đang khôi phục phiên đăng nhập..." />;
   if (!user) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
   if (admin && user.role !== 'ADMIN') return <Result status="403" title="Không có quyền truy cập"
     subTitle="Trang này dành cho quản trị viên." extra={<Link to="/app/houses"><Button>Về nhà ở</Button></Link>} />;
@@ -29,9 +30,10 @@ function RequireAuth({ admin = false, owner = false, roles }) {
 }
 
 function PublicOnly() {
-  const { user } = useAuth();
+  const { user, initializing } = useAuth();
   const { state } = useLocation();
   const destination = typeof state?.from === 'string' && state.from.startsWith('/app/') ? state.from : '/app/houses';
+  if (initializing) return <Spin fullscreen tip="Đang khôi phục phiên đăng nhập..." />;
   return user ? <Navigate to={destination} replace /> : <PublicLayout />;
 }
 

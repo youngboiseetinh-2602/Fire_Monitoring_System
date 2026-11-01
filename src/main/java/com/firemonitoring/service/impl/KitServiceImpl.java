@@ -111,8 +111,10 @@ public class KitServiceImpl implements KitService {
     @Transactional(readOnly = true)
     public List<Long> startHouseTelemetry(long houseId) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (!hasRole(authentication, "ROLE_ADMIN")) {
-            throw new AccessDeniedException("Only admins can request kits by house ID");
+        boolean admin = hasRole(authentication, "ROLE_ADMIN");
+        if (!admin && !houseMemberRepository.existsByHouseIdAndUserId(
+                houseId, currentUserProvider.getCurrentUserId())) {
+            throw new AccessDeniedException("You are not a member of this house");
         }
         return getData(houseId);
     }
