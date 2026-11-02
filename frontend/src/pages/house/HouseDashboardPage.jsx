@@ -197,7 +197,6 @@ export default function HouseDashboardPage() {
       </Row>}
     </Card>
     <Card title="Lịch sử cảm biến và cảnh báo" style={{ marginTop: 24 }}>
-      <Typography.Paragraph type="secondary">Lịch sử được giữ trong phiên trình duyệt hiện tại; backend chưa cung cấp API lưu và đọc lịch sử.</Typography.Paragraph>
       <Tabs items={[
         { key: 'readings', label: `Cảm biến (${readings.length})`, children: <Table rowKey="receivedAt" size="small" scroll={{ x: 'max-content' }} dataSource={readings} locale={{ emptyText: <Empty description="Chưa nhận được dữ liệu cảm biến" /> }} pagination={{ pageSize: 8, showSizeChanger: false }} columns={[
           { title: 'Thời gian nhận', dataIndex: 'receivedAt', render: value => new Date(value).toLocaleString('vi-VN') },
