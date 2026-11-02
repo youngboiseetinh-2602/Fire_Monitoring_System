@@ -214,8 +214,6 @@ export default function HouseDashboardPage() {
           { title: 'Gas', dataIndex: 'gas', render: value => `${value} ppm` },
           { title: 'Cảm biến lửa', dataIndex: 'flame', render: value => <Tag color={value ? 'orange' : 'default'}>{value ? 'Phát hiện' : 'Không'}</Tag> },
           { title: 'Dự đoán AI', dataIndex: 'status', render: value => <Tag color={['FIRE', 'EXTREME_FIRE'].includes(value) ? 'red' : value === 'DANGER' ? 'orange' : value === 'UNNORMAL' ? 'gold' : 'green'}>{value}</Tag> },
-          { title: 'Nguồn cảnh báo', dataIndex: 'alertSource', render: value => <Tag color="red">{value === 'AI' ? 'AI' : 'Cảm biến lửa'}</Tag> },
-          { title: 'Độ tin cậy', dataIndex: 'confidence', render: value => value == null ? '—' : `${(Number(value) * 100).toFixed(1)}%` },
         ]} /> },
       ]} />
     </Card>
