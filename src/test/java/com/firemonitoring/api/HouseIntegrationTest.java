@@ -55,7 +55,8 @@ class HouseIntegrationTest {
         org.springframework.security.core.context.SecurityContextHolder.clearContext();
     }
 
-    private void authenticateKitAdmin() {
+    private void authenticateAdmin() {
+        currentUser.setRole(UserRole.ADMIN);
         org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
                 new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
                         "admin", "unused", List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_ADMIN"))));
@@ -96,7 +97,7 @@ class HouseIntegrationTest {
 
     @Test
     void rejectsTopicWildcardsInDeviceUid() throws Exception {
-        authenticateKitAdmin();
+        authenticateAdmin();
         House house = saveDataHouse("Invalid device");
         long before = locationRepository.count();
         for (String uid : List.of("a/b", "a+b", "a#b", "a b")) {
@@ -110,7 +111,7 @@ class HouseIntegrationTest {
 
     @Test
     void addsKitAndNewLocationToRequestedHouse() throws Exception {
-        authenticateKitAdmin();
+        authenticateAdmin();
         House house = saveDataHouse("New kit house");
         mvc.perform(post("/houses/{houseId}/kits", house.getId())
                         .contentType(MediaType.APPLICATION_JSON)
@@ -125,7 +126,7 @@ class HouseIntegrationTest {
 
     @Test
     void rejectsDuplicateDeviceOrLocationWithoutAddingRows() throws Exception {
-        authenticateKitAdmin();
+        authenticateAdmin();
         House house = saveDataHouse("Duplicate kit house");
         saveDataKit(saveDataLocation(house, "Kitchen"), "existing-device");
         long locationsBefore = locationRepository.count();
@@ -143,7 +144,7 @@ class HouseIntegrationTest {
 
     @Test
     void rejectsInvalidKitInputAndMissingHouse() throws Exception {
-        authenticateKitAdmin();
+        authenticateAdmin();
         for (String body : List.of("{}", "{\"location\":\" \",\"deviceUid\":\"kit\"}",
                 "{\"location\":\"Room\",\"deviceUid\":\"" + "x".repeat(101) + "\"}")) {
             mvc.perform(post("/houses/1/kits").contentType(MediaType.APPLICATION_JSON).content(body))
@@ -159,16 +160,15 @@ class HouseIntegrationTest {
     }
 
     @Test
-    void allowsNonAdminAddingKit() throws Exception {
+    void rejectsMemberAddingKit() throws Exception {
         org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
                 new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
                         "member", "unused", List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_MEMBER"))));
         House house = saveDataHouse("Member kit house");
         mvc.perform(post("/houses/{houseId}/kits", house.getId()).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"location\":\"Room\",\"deviceUid\":\"kit\"}"))
-                .andExpect(status().isCreated())
-                .andExpect(content().string("Thêm kit thành công"));
-        assertTrue(kitRepository.findByDeviceUid("kit").isPresent());
+                .andExpect(status().isForbidden());
+        assertTrue(kitRepository.findByDeviceUid("kit").isEmpty());
     }
     @Autowired
     private HouseRepository repository;
@@ -246,7 +246,8 @@ class HouseIntegrationTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"ROLE_MEMBER", "ROLE_OWNER", "NONE"})
-    void rejectsNonAdminsBeforeRequestingTelemetry(String role) throws Exception {
+    void rejectsUsersWithoutHouseAccessBeforeRequestingTelemetry(String role) throws Exception {
+        House house = saveDataHouse("Private telemetry house");
         var context = org.springframework.security.core.context.SecurityContextHolder.createEmptyContext();
         if (!role.equals("NONE")) {
             context.setAuthentication(new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
@@ -254,8 +255,10 @@ class HouseIntegrationTest {
         }
         org.springframework.security.core.context.SecurityContextHolder.setContext(context);
         try {
-            mvc.perform(post("/houses/1/telemetry/start")).andExpect(status().isForbidden());
-            verifyNoInteractions(commandPublisher, members);
+            mvc.perform(post("/houses/{houseId}/telemetry/start", house.getId()))
+                    .andExpect(status().isForbidden());
+            verify(members).existsByHouseIdAndUserId(house.getId(), 7L);
+            verifyNoInteractions(commandPublisher);
         } finally {
             org.springframework.security.core.context.SecurityContextHolder.clearContext();
         }
@@ -394,6 +397,7 @@ class HouseIntegrationTest {
         verify(users).save(currentUser);
         verify(members).save(argThat(member -> member.getHouse().getId().equals(id)
                 && member.getUser() == currentUser));
+        belongsTo(savedHouse);
         mvc.perform(get("/houses"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(1))
@@ -417,6 +421,7 @@ class HouseIntegrationTest {
 
     @Test
     void paginatesInAscendingIdOrder() throws Exception {
+        authenticateAdmin();
         Long firstId = null;
         Long lastId = null;
         for (int i = 0; i < 21; i++) {
@@ -461,6 +466,7 @@ class HouseIntegrationTest {
 
     @Test
     void searchesCityWardAndDetailWithOr() throws Exception {
+        authenticateAdmin();
         House cityMatch = savedHouse();
         cityMatch.setCity("Da Nang");
         House wardMatch = savedHouse();
@@ -489,6 +495,7 @@ class HouseIntegrationTest {
 
     @Test
     void searchEscapesLikeWildcardsAndKeepsPagination() throws Exception {
+        authenticateAdmin();
         House literal = savedHouse();
         literal.setAddressDetail("Block 50%_!");
         savedHouse();
@@ -507,6 +514,7 @@ class HouseIntegrationTest {
 
     @Test
     void updatesAllFieldsAndPreservesId() throws Exception {
+        authenticateAdmin();
         long id = savedHouse().getId();
         ObjectNode request = body().put("houseName", "Nha B").put("city", "Da Nang")
                 .put("ward", "Hai Chau").put("addressDetail", "25 Le Loi")

@@ -9,6 +9,7 @@ import PageHeader from '../../components/common/PageHeader';
 const initial = { kitId: null, deviceUid: '', temperature: null, humidity: null, gas: null, flame: false, status: 'NORMAL', confidence: null, location: '' };
 const wsBase = import.meta.env.VITE_API_BASE_URL || window.location.origin;
 const historyLimit = 100;
+const flameConfirmationCount = 3;
 
 function connectStomp(houseId, token, onData, onStatus) {
   const url = wsBase.replace(/^http/, 'ws').replace(/\/$/, '') + '/ws';
@@ -82,7 +83,8 @@ export default function HouseDashboardPage() {
   const [commandBusy, setCommandBusy] = useState('');
   const [deviceState, setDeviceState] = useState({ pump: false, buzz: false, led: false });
   const [selectedKitId, setSelectedKitId] = useState(null);
-  const previousFire = useRef(false);
+  const previousFireByKit = useRef(new Map());
+  const consecutiveFlameReadings = useRef(new Map());
   const [form] = Form.useForm();
 
   useEffect(() => {
@@ -95,7 +97,8 @@ export default function HouseDashboardPage() {
     setReadings([]);
     setAlerts([]);
     setDeviceState({ pump: false, buzz: false, led: false });
-    previousFire.current = false;
+    previousFireByKit.current.clear();
+    consecutiveFlameReadings.current.clear();
   }, [houseId]);
 
   useEffect(() => {
@@ -124,19 +127,31 @@ export default function HouseDashboardPage() {
     if (!kitIds.length) return undefined;
     return connectStomp(houseId, user?.accessToken || user?.token || '', data => {
       const reading = { ...initial, ...data, receivedAt: new Date().toISOString() };
-      const isFire = reading.flame || ['FIRE', 'EXTREME_FIRE'].includes(reading.status);
+      const flameKey = reading.kitId || reading.deviceUid || reading.location || 'unknown';
+      const flameCount = reading.flame
+        ? (consecutiveFlameReadings.current.get(flameKey) || 0) + 1
+        : 0;
+      consecutiveFlameReadings.current.set(flameKey, flameCount);
+      const flameConfirmed = flameCount >= flameConfirmationCount;
+      const modelFire = ['FIRE', 'EXTREME_FIRE'].includes(reading.status);
+      const isFire = flameConfirmed || modelFire;
+      const normalizedReading = {
+        ...reading,
+        flameConfirmed,
+        alertSource: modelFire ? 'AI' : flameConfirmed ? 'FLAME_SENSOR' : null,
+      };
       setHasTelemetry(true);
-      setSensor(reading);
-      setReadings(current => [reading, ...current].slice(0, historyLimit));
+      setSensor(normalizedReading);
+      setReadings(current => [normalizedReading, ...current].slice(0, historyLimit));
       if (isFire) {
-        setAlerts(current => [{ ...reading, id: `${reading.receivedAt}-${reading.kitId || reading.location}` }, ...current].slice(0, historyLimit));
-        if (!previousFire.current) message.error(`Cảnh báo cháy tại ${reading.location || houseName}.`);
+        setAlerts(current => [{ ...normalizedReading, id: `${reading.receivedAt}-${reading.kitId || reading.location}` }, ...current].slice(0, historyLimit));
+        if (!previousFireByKit.current.get(flameKey)) message.error(`Cảnh báo cháy tại ${reading.location || houseName}.`);
       }
-      previousFire.current = isFire;
+      previousFireByKit.current.set(flameKey, isFire);
     }, setConnected);
   }, [houseId, kitIds.length, user]);
 
-  const fire = sensor.flame || ['FIRE', 'EXTREME_FIRE'].includes(sensor.status);
+  const fire = sensor.flameConfirmed || ['FIRE', 'EXTREME_FIRE'].includes(sensor.status);
   const statusColor = fire ? 'red' : sensor.status === 'DANGER' ? 'orange' : sensor.status === 'UNNORMAL' ? 'gold' : 'green';
   const statusLabel = fire ? 'PHÁT HIỆN CHÁY' : ({ NORMAL: 'An toàn', UNNORMAL: 'Bất thường', DANGER: 'Nguy hiểm' }[sensor.status] || sensor.status);
 
@@ -197,7 +212,9 @@ export default function HouseDashboardPage() {
           { title: 'Vị trí', dataIndex: 'location', render: value => value || '—' },
           { title: 'Nhiệt độ', dataIndex: 'temperature', render: value => `${value} °C` },
           { title: 'Gas', dataIndex: 'gas', render: value => `${value} ppm` },
-          { title: 'Kết quả', dataIndex: 'status', render: value => <Tag color="red">{value}</Tag> },
+          { title: 'Cảm biến lửa', dataIndex: 'flame', render: value => <Tag color={value ? 'orange' : 'default'}>{value ? 'Phát hiện' : 'Không'}</Tag> },
+          { title: 'Dự đoán AI', dataIndex: 'status', render: value => <Tag color={['FIRE', 'EXTREME_FIRE'].includes(value) ? 'red' : value === 'DANGER' ? 'orange' : value === 'UNNORMAL' ? 'gold' : 'green'}>{value}</Tag> },
+          { title: 'Nguồn cảnh báo', dataIndex: 'alertSource', render: value => <Tag color="red">{value === 'AI' ? 'AI' : 'Cảm biến lửa'}</Tag> },
           { title: 'Độ tin cậy', dataIndex: 'confidence', render: value => value == null ? '—' : `${(Number(value) * 100).toFixed(1)}%` },
         ]} /> },
       ]} />
