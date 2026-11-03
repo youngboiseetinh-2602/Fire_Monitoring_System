@@ -6,6 +6,7 @@ import { houseApi } from '../../api/houseApi';
 import { ApiError } from '../../components/common/Feedback';
 import { applyFieldErrors, maxLength, required } from '../../components/common/formRules';
 import { useAuth } from '../../auth/AuthContext';
+import { useTelemetry } from '../../realtime/TelemetryContext';
 
 export default function HouseForm({ house, returnTo = '/app/houses' }) {
   const editing = Boolean(house);
@@ -15,12 +16,16 @@ export default function HouseForm({ house, returnTo = '/app/houses' }) {
   const { notification, modal } = App.useApp();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const { refreshHouses } = useTelemetry();
 
   async function save(values) {
     setPending(true); setError(null);
     try {
       if (editing) await houseApi.update(house.id, values);
-      else await houseApi.create(values);
+      else {
+        await houseApi.create(values);
+        refreshHouses();
+      }
       notification.success({ message: editing ? 'Đã cập nhật ngôi nhà' : 'Đã tạo ngôi nhà mới' });
       if (editing || user?.role === 'OWNER') navigate(returnTo, { replace: true });
       else {

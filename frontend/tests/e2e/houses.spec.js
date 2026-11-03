@@ -1,6 +1,58 @@
 import { test, expect } from '@playwright/test';
 import { mockBackend, signIn } from './helpers';
 
+test('fire notification appears on the house list without opening monitoring', async ({ page }) => {
+  await page.addInitScript(() => {
+    let fireSent = false;
+    window.WebSocket = class MockWebSocket {
+      static CONNECTING = 0;
+      static OPEN = 1;
+      static CLOSED = 3;
+
+      constructor() {
+        this.readyState = MockWebSocket.CONNECTING;
+        window.setTimeout(() => {
+          if (this.readyState !== MockWebSocket.CONNECTING) return;
+          this.readyState = MockWebSocket.OPEN;
+          this.onopen?.();
+        }, 0);
+      }
+
+      send(frame) {
+        if (frame.startsWith('CONNECT')) {
+          window.setTimeout(() => this.onmessage?.({ data: 'CONNECTED\nversion:1.2\n\n\0' }), 0);
+        }
+        if (!fireSent && frame.includes('destination:/topic/houses/1/data')) {
+          fireSent = true;
+          const reading = JSON.stringify({
+            kitId: 1, deviceUid: 'ESP32-001', temperature: 58, humidity: 30,
+            gas: 900, flame: true, location: 'Phòng khách', status: 'FIRE', confidence: 0.98,
+          });
+          window.setTimeout(() => this.onmessage?.({
+            data: `MESSAGE\nsubscription:house-1\ndestination:/topic/houses/1/data\n\n${reading}\0`,
+          }), 0);
+        }
+      }
+
+      close() {
+        if (this.readyState === MockWebSocket.CLOSED) return;
+        this.readyState = MockWebSocket.CLOSED;
+        this.onclose?.();
+      }
+    };
+  });
+  await mockBackend(page);
+  await signIn(page);
+  await expect(page).toHaveURL(/\/app\/houses$/);
+  await expect(page.getByText('Cảnh báo cháy: Nhà 1')).toBeVisible();
+  await expect(page.getByText(/Phát hiện dấu hiệu cháy tại Phòng khách/)).toBeVisible();
+  const popup = page.getByRole('dialog', { name: 'CẢNH BÁO CHÁY' });
+  await expect(popup).toBeVisible();
+  await expect(popup).toContainText('Nhà 1 tại Phòng khách đang có dấu hiệu cháy');
+  await expect(popup).toContainText('58 °C');
+  await expect(popup.getByRole('button', { name: 'Mở giám sát' })).toBeVisible();
+});
+
 test('house list paginates, searches OR fields and resets to findAll', async ({ page }) => {
   const state = await mockBackend(page);
   await signIn(page);

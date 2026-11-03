@@ -3,6 +3,7 @@ import { Drawer, Grid, Layout } from 'antd';
 import { Outlet, useLocation } from 'react-router-dom';
 import Header from './Header';
 import Sidebar from './Sidebar';
+import { TelemetryProvider } from '../../realtime/TelemetryContext';
 
 export default function MainLayout() {
   const screens = Grid.useBreakpoint();
@@ -16,7 +17,7 @@ export default function MainLayout() {
   useEffect(() => { main.current?.focus(); window.scrollTo(0, 0); }, [pathname]);
   const sidebarWidth = mobile ? 0 : collapsed ? 80 : 236;
 
-  return <Layout className="main-layout">
+  return <TelemetryProvider><Layout className="main-layout">
     <Header mobile={mobile} collapsed={mobile || collapsed}
       onMenu={() => mobile ? setDrawer(true) : setCollapsed(value => !value)} />
     {!mobile && <Layout.Sider className="desktop-sidebar" width={236} collapsedWidth={80}
@@ -32,5 +33,5 @@ export default function MainLayout() {
         <Outlet />
       </div>
     </Layout.Content>
-  </Layout>;
+  </Layout></TelemetryProvider>;
 }

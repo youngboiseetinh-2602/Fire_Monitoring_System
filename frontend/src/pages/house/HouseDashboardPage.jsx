@@ -1,71 +1,21 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
 import { Alert, Badge, Button, Card, Col, Empty, Flex, Form, Input, Modal, Row, Select, Space, Statistic, Switch, Table, Tabs, Tag, Typography, message } from 'antd';
 import { AlertOutlined, BulbOutlined, CloudOutlined, DashboardOutlined, FireOutlined, PlusOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { kitApi } from '../../api/kitApi';
 import { useAuth } from '../../auth/AuthContext';
 import PageHeader from '../../components/common/PageHeader';
+import { useTelemetry } from '../../realtime/TelemetryContext';
 
 const initial = { kitId: null, deviceUid: '', temperature: null, humidity: null, gas: null, flame: false, status: 'NORMAL', confidence: null, location: '' };
-const wsBase = import.meta.env.VITE_API_BASE_URL || window.location.origin;
 const historyLimit = 100;
-const flameConfirmationCount = 3;
-
-function connectStomp(houseId, token, onData, onStatus) {
-  const url = wsBase.replace(/^http/, 'ws').replace(/\/$/, '') + '/ws';
-  let socket;
-  let heartbeat;
-  let retryTimer;
-  let retryDelay = 1000;
-  let disposed = false;
-  let buffer = '';
-  const send = frame => { if (socket?.readyState === WebSocket.OPEN) socket.send(`${frame}\0`); };
-  const connect = () => {
-    if (disposed) return;
-    buffer = '';
-    socket = new WebSocket(url);
-    socket.onopen = () => send(`CONNECT\naccept-version:1.2\nheart-beat:0,10000\nAuthorization:Bearer ${token}\n\n`);
-    socket.onmessage = event => {
-      buffer += event.data;
-      const frames = buffer.split('\0');
-      buffer = frames.pop() || '';
-      frames.forEach(frame => {
-        const separator = frame.indexOf('\n\n');
-        const command = (separator < 0 ? frame : frame.slice(0, separator)).split('\n')[0];
-        if (command === 'CONNECTED') {
-          retryDelay = 1000;
-          onStatus(true);
-          send(`SUBSCRIBE\nid:house-${houseId}\ndestination:/topic/houses/${houseId}/data\nack:auto\n\n`);
-          heartbeat = window.setInterval(() => { if (socket?.readyState === WebSocket.OPEN) socket.send('\n'); }, 10000);
-        } else if (command === 'MESSAGE' && separator >= 0) {
-          try { onData(JSON.parse(frame.slice(separator + 2))); } catch { /* Ignore malformed frames. */ }
-        } else if (command === 'ERROR') socket.close();
-      });
-    };
-    socket.onclose = () => {
-      window.clearInterval(heartbeat);
-      onStatus(false);
-      if (!disposed) {
-        retryTimer = window.setTimeout(connect, retryDelay);
-        retryDelay = Math.min(retryDelay * 2, 15000);
-      }
-    };
-    socket.onerror = () => socket.close();
-  };
-  connect();
-  return () => {
-    disposed = true;
-    window.clearTimeout(retryTimer);
-    window.clearInterval(heartbeat);
-    if (socket?.readyState === WebSocket.OPEN) send('DISCONNECT\n\n');
-    socket?.close();
-  };
-}
 
 export default function HouseDashboardPage() {
   const { houseId } = useParams();
   const location = useLocation();
   const { user } = useAuth();
+  const { connected, latestByHouse } = useTelemetry();
+  const lastEvent = latestByHouse[Number(houseId)];
   const houseName = location.state?.houseName || `Nhà #${houseId}`;
   const admin = user?.role === 'ADMIN';
   const owner = user?.role === 'OWNER';
@@ -74,7 +24,6 @@ export default function HouseDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [kitError, setKitError] = useState(null);
   const [kitRetry, setKitRetry] = useState(0);
-  const [connected, setConnected] = useState(false);
   const [sensor, setSensor] = useState(initial);
   const [hasTelemetry, setHasTelemetry] = useState(false);
   const [readings, setReadings] = useState([]);
@@ -83,22 +32,17 @@ export default function HouseDashboardPage() {
   const [commandBusy, setCommandBusy] = useState('');
   const [deviceState, setDeviceState] = useState({ pump: false, buzz: false, led: false });
   const [selectedKitId, setSelectedKitId] = useState(null);
-  const previousFireByKit = useRef(new Map());
-  const consecutiveFlameReadings = useRef(new Map());
   const [form] = Form.useForm();
 
   useEffect(() => {
     setLoading(true);
     setKitIds([]);
     setSelectedKitId(null);
-    setConnected(false);
     setSensor(initial);
     setHasTelemetry(false);
     setReadings([]);
     setAlerts([]);
     setDeviceState({ pump: false, buzz: false, led: false });
-    previousFireByKit.current.clear();
-    consecutiveFlameReadings.current.clear();
   }, [houseId]);
 
   useEffect(() => {
@@ -124,32 +68,16 @@ export default function HouseDashboardPage() {
   }, [houseId, admin, kitRetry]);
 
   useEffect(() => {
-    if (!kitIds.length) return undefined;
-    return connectStomp(houseId, user?.accessToken || user?.token || '', data => {
-      const reading = { ...initial, ...data, receivedAt: new Date().toISOString() };
-      const flameKey = reading.kitId || reading.deviceUid || reading.location || 'unknown';
-      const flameCount = reading.flame
-        ? (consecutiveFlameReadings.current.get(flameKey) || 0) + 1
-        : 0;
-      consecutiveFlameReadings.current.set(flameKey, flameCount);
-      const flameConfirmed = flameCount >= flameConfirmationCount;
-      const modelFire = ['FIRE', 'EXTREME_FIRE'].includes(reading.status);
-      const isFire = flameConfirmed || modelFire;
-      const normalizedReading = {
-        ...reading,
-        flameConfirmed,
-        alertSource: modelFire ? 'AI' : flameConfirmed ? 'FLAME_SENSOR' : null,
-      };
-      setHasTelemetry(true);
-      setSensor(normalizedReading);
-      setReadings(current => [normalizedReading, ...current].slice(0, historyLimit));
-      if (isFire) {
-        setAlerts(current => [{ ...normalizedReading, id: `${reading.receivedAt}-${reading.kitId || reading.location}` }, ...current].slice(0, historyLimit));
-        if (!previousFireByKit.current.get(flameKey)) message.error(`Cảnh báo cháy tại ${reading.location || houseName}.`);
-      }
-      previousFireByKit.current.set(flameKey, isFire);
-    }, setConnected);
-  }, [houseId, kitIds.length, user]);
+    if (!lastEvent) return;
+    const reading = { ...initial, ...lastEvent.data, eventId: lastEvent.sequence };
+    const isFire = reading.flameConfirmed || ['FIRE', 'EXTREME_FIRE'].includes(reading.status);
+    setHasTelemetry(true);
+    setSensor(reading);
+    setReadings(current => [reading, ...current].slice(0, historyLimit));
+    if (isFire) {
+      setAlerts(current => [{ ...reading, id: lastEvent.sequence }, ...current].slice(0, historyLimit));
+    }
+  }, [houseId, lastEvent]);
 
   const fire = sensor.flameConfirmed || ['FIRE', 'EXTREME_FIRE'].includes(sensor.status);
   const statusColor = fire ? 'red' : sensor.status === 'DANGER' ? 'orange' : sensor.status === 'UNNORMAL' ? 'gold' : 'green';
@@ -198,7 +126,7 @@ export default function HouseDashboardPage() {
     </Card>
     <Card title="Lịch sử cảm biến và cảnh báo" style={{ marginTop: 24 }}>
       <Tabs items={[
-        { key: 'readings', label: `Cảm biến (${readings.length})`, children: <Table rowKey="receivedAt" size="small" scroll={{ x: 'max-content' }} dataSource={readings} locale={{ emptyText: <Empty description="Chưa nhận được dữ liệu cảm biến" /> }} pagination={{ pageSize: 8, showSizeChanger: false }} columns={[
+        { key: 'readings', label: `Cảm biến (${readings.length})`, children: <Table rowKey="eventId" size="small" scroll={{ x: 'max-content' }} dataSource={readings} locale={{ emptyText: <Empty description="Chưa nhận được dữ liệu cảm biến" /> }} pagination={{ pageSize: 8, showSizeChanger: false }} columns={[
           { title: 'Thời gian nhận', dataIndex: 'receivedAt', render: value => new Date(value).toLocaleString('vi-VN') },
           { title: 'Vị trí', dataIndex: 'location', render: value => value || '—' },
           { title: 'Nhiệt độ', dataIndex: 'temperature', render: value => `${value} °C` },
