@@ -70,7 +70,7 @@ export default function HouseDashboardPage() {
   useEffect(() => {
     if (!lastEvent) return;
     const reading = { ...initial, ...lastEvent.data, eventId: lastEvent.sequence };
-    const isFire = reading.flameConfirmed || ['FIRE', 'EXTREME_FIRE'].includes(reading.status);
+    const isFire = reading.fireConfirmed === true;
     setHasTelemetry(true);
     setSensor(reading);
     setReadings(current => [reading, ...current].slice(0, historyLimit));
@@ -79,9 +79,10 @@ export default function HouseDashboardPage() {
     }
   }, [houseId, lastEvent]);
 
-  const fire = sensor.flameConfirmed || ['FIRE', 'EXTREME_FIRE'].includes(sensor.status);
-  const statusColor = fire ? 'red' : sensor.status === 'DANGER' ? 'orange' : sensor.status === 'UNNORMAL' ? 'gold' : 'green';
-  const statusLabel = fire ? 'PHÁT HIỆN CHÁY' : ({ NORMAL: 'An toàn', UNNORMAL: 'Bất thường', DANGER: 'Nguy hiểm' }[sensor.status] || sensor.status);
+  const fire = sensor.fireConfirmed === true;
+  const gasWarning = sensor.gasWarning === true && !fire;
+  const statusColor = fire ? 'red' : gasWarning ? 'orange' : 'green';
+  const statusLabel = fire ? 'PHÁT HIỆN CHÁY' : gasWarning ? 'CẢNH BÁO KHÍ GAS' : 'BÌNH THƯỜNG';
 
   async function addKit(values) {
     try {
@@ -109,6 +110,16 @@ export default function HouseDashboardPage() {
   return <>
     <PageHeader title={`Giám sát: ${houseName}`} description={<Space><Badge status={connected ? 'success' : 'default'} text={connected ? 'Đang nhận dữ liệu realtime' : 'Chưa kết nối realtime'} />{kitIds.length > 0 && <Tag color="blue">{kitIds.length} thiết bị</Tag>}</Space>} />
     {fire && <Alert type="error" showIcon icon={<FireOutlined />} message="CẢNH BÁO CHÁY" description="Thiết bị phát hiện dấu hiệu cháy. Hãy kiểm tra khu vực ngay." banner style={{ marginBottom: 20 }} />}
+    {gasWarning && (
+      <Alert
+        type="warning"
+        showIcon
+        message="CẢNH BÁO KHÍ GAS"
+        description={`Giá trị MQ-2: ${sensor.gas} ADC. Vui lòng kiểm tra khu vực.`}
+        banner
+        style={{ marginBottom: 20 }}
+      />
+    )}
     {kitError && <Alert type="error" showIcon message={kitError.message || 'Không tải được danh sách thiết bị.'} action={<Button size="small" onClick={() => setKitRetry(value => value + 1)}>Thử lại</Button>} style={{ marginBottom: 16 }} />}
     {!loading && kitIds.length === 0 && <Alert type="info" showIcon message="Nhà chưa có kit được liên kết." description={canAddKit ? 'Thêm kit để bắt đầu nhận dữ liệu cảm biến.' : 'Chưa tìm thấy thiết bị trong các nhà bạn tham gia.'} action={canAddKit && <Button size="small" type="primary" icon={<PlusOutlined />} onClick={() => setKitModal(true)}>Thêm kit</Button>} style={{ marginBottom: 20 }} />}
     <Flex justify="space-between" align="center" wrap gap="small"><Typography.Title level={4}>Thông số môi trường</Typography.Title>{canAddKit && <Button icon={<PlusOutlined />} onClick={() => setKitModal(true)}>Thêm kit</Button>}</Flex>

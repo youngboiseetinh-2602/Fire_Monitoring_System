@@ -8,7 +8,6 @@ import { useAuth } from '../auth/AuthContext';
 
 const TelemetryContext = createContext(null);
 const wsBase = import.meta.env.VITE_API_BASE_URL || window.location.origin;
-const flameConfirmationCount = 3;
 
 function parseFrame(frame) {
   const separator = frame.indexOf('\n\n');
@@ -109,7 +108,6 @@ export function TelemetryProvider({ children }) {
   const [latestByHouse, setLatestByHouse] = useState({});
   const [refreshVersion, setRefreshVersion] = useState(0);
   const eventSequence = useRef(0);
-  const consecutiveFlameReadings = useRef(new Map());
   const previousFireByKit = useRef(new Map());
 
   useEffect(() => {
@@ -150,17 +148,21 @@ export function TelemetryProvider({ children }) {
         const reading = { ...data, receivedAt: new Date().toISOString() };
         const deviceKey = reading.kitId || reading.deviceUid || reading.location || 'unknown';
         const fireKey = `${houseId}:${deviceKey}`;
-        const flameCount = reading.flame
-          ? (consecutiveFlameReadings.current.get(fireKey) || 0) + 1
-          : 0;
-        consecutiveFlameReadings.current.set(fireKey, flameCount);
-        const flameConfirmed = flameCount >= flameConfirmationCount;
+        const temperature = Number(reading.temperature);
+        const fireCondition = reading.flame === true
+          && Number.isFinite(temperature)
+          && temperature >= 50;
+        const gasValue = Number(reading.gas);
+        const gasWarning = Number.isFinite(gasValue) && gasValue >= 800;
         const modelFire = ['FIRE', 'EXTREME_FIRE'].includes(reading.status);
-        const isFire = flameConfirmed || modelFire;
+        const isFire = fireCondition && modelFire;
         const normalizedReading = {
           ...reading,
-          flameConfirmed,
-          alertSource: modelFire ? 'AI' : flameConfirmed ? 'FLAME_SENSOR' : null,
+          modelStatus: reading.status,
+          fireConfirmed: isFire,
+          gasWarning,
+          status: isFire ? 'FIRE' : 'NORMAL',
+          alertSource: isFire ? 'AI_AND_SENSOR' : gasWarning ? 'GAS_SENSOR' : null,
         };
         const sequence = ++eventSequence.current;
         setLatestByHouse(current => ({
